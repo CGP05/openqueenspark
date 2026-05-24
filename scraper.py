@@ -1,4 +1,5 @@
 import requests
+from bs4 import BeautifulSoup
 
 url = "https://www.ola.org/en/legislative-business/house-documents/parliament-44/session-1"
 
