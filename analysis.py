@@ -1,5 +1,6 @@
 STOPWORDS = set()
 
+#copied function from openparliament
 def analyze_statements(statements, corpus_name, min_ratio=2):
     results = []
     ngram_lengths = [
