@@ -11,7 +11,7 @@ HEADERS = {
 }
 DELAY = 2  # seconds between requests
 
-def scrape_hansard_list(url):
+def scrape_hansard(url):
     """Fetch list of Hansard documents from a session page."""
     try:
         time.sleep(DELAY)
@@ -26,7 +26,7 @@ def scrape_hansard_list(url):
                 full_url = BASE_URL + href if href.startswith('/') else href
                 hansard_links.append(full_url)
 
-        return hansard_links
+        return hansards
     except requests.RequestException as e:
         print(f"Error fetching {url}: {e}")
         return []
@@ -95,6 +95,6 @@ def scrape_and_store_session(session_url):
             store_raw_hansard(session_date, hansard_text, hansard_url)
 
 if __name__ == "__main__":
-    session_url = "https://www.ola.org/en/legislative-business/house-documents/parliament-44/session-1"
+    session_url = "https://www.ola.org/en/legislative-business/house-documents/parliament-{}/session-{}".format(datetime.now().year, datetime.now().year)
     scrape_and_store_session(session_url)
 
