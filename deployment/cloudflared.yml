@@ -1,0 +1,13 @@
+# Cloudflare Tunnel Configuration for OpenQueensPark
+# Domain: openqueenspark.ca
+tunnel: openqueenspark-tunnel
+credentials-file: /etc/cloudflared/openqueenspark-tunnel.json
+
+ingress:
+  # Route openqueenspark.ca to local Streamlit port 8501
+  - hostname: openqueenspark.ca
+    service: http://localhost:8501
+  - hostname: www.openqueenspark.ca
+    service: http://localhost:8501
+  # Catch-all rule
+  - service: http_status:404

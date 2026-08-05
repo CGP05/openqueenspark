@@ -1,100 +1,126 @@
 import requests
 from bs4 import BeautifulSoup
-from database import insert_party, insert_speaker, insert_session, insert_speech
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 import time
+import os
+
+from database import (
+    create_tables, insert_session, insert_speaker, insert_speech,
+    save_party_summary, save_word_metrics, get_connection
+)
+from parser import parse_hansard_html
+from analysis import analyze_speeches
+from summarizer import generate_all_party_summaries
 
 BASE_URL = "https://www.ola.org"
 HEADERS = {
-    'User-Agent': 'OpenQueensPark/1.0 (Civic Tech Project; +https://openqueenspark.ca)'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) OpenQueensPark/1.0 (Civic Tech Project; +https://openqueenspark.ca)'
 }
-DELAY = 2  # seconds between requests
+REQUEST_DELAY = 1.5 # Respectful request delay for OLA servers
 
-def scrape_hansard(url):
-    """Fetch list of Hansard documents from a session page."""
+def construct_hansard_url(date_str, parliament=44, session=1):
+    """
+    Constructs canonical OLA Hansard URL for a given YYYY-MM-DD date.
+    Example: https://www.ola.org/en/legislative-business/house-documents/parliament-44/session-1/2026-06-02/hansard
+    """
+    return f"{BASE_URL}/en/legislative-business/house-documents/parliament-{parliament}/session-{session}/{date_str}/hansard"
+
+def fetch_and_process_date(date_str, parliament=44, session_number=1, force_reprocess=False):
+    """
+    Fetches Hansard transcript for a date, parses speeches, runs analysis & Ollama summaries,
+    and saves all structured data to SQLite.
+    """
+    create_tables()
+    url = construct_hansard_url(date_str, parliament, session_number)
+
+    # Check if session already exists
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id FROM sessions WHERE session_date = ?', (date_str,))
+    existing_session = cursor.fetchone()
+    conn.close()
+
+    if existing_session and not force_reprocess:
+        print(f"Session for {date_str} already exists in database. Skipping fetch.")
+        return existing_session['id']
+
+    print(f"Fetching Hansard from OLA: {url}")
     try:
-        time.sleep(DELAY)
-        response = requests.get(url, headers=HEADERS, timeout=10)
+        response = requests.get(url, headers=HEADERS, timeout=20)
+        if response.status_code == 404:
+            print(f"No Hansard document found for date {date_str} (Legislature was likely not sitting).")
+            return None
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
 
-        hansard_links = []
-        for link in soup.find_all('a'):
-            href = link.get('href')
-            if href and 'hansard' in href.lower():
-                full_url = BASE_URL + href if href.startswith('/') else href
-                hansard_links.append(full_url)
+        print(f"Parsing transcript content for {date_str}...")
+        parsed = parse_hansard_html(response.content, source_url=url)
 
-        return hansards
+        if not parsed['speeches']:
+            print(f"Warning: No speeches could be extracted for {date_str}.")
+            return None
+
+        # Insert session record
+        session_id = insert_session(date_str, parliament, session_number, url)
+
+        # Insert speakers and speeches
+        print(f"Inserting {len(parsed['speeches'])} speeches into database...")
+        for sp in parsed['speeches']:
+            speaker_id = insert_speaker(
+                name=sp['speaker_name'],
+                party_name=sp['party_name'],
+                constituency=sp['constituency'],
+                title=sp['title']
+            )
+            insert_speech(
+                speaker_id=speaker_id,
+                session_id=session_id,
+                text=sp['text'],
+                h2_heading=sp['h2_heading'],
+                h3_heading=sp['h3_heading'],
+                timestamp=sp['timestamp'],
+                sequence=sp['sequence']
+            )
+
+        # Run text analysis & n-gram generation
+        print(f"Running n-gram text analysis for {date_str}...")
+        analysis_result = analyze_speeches(parsed['speeches'])
+        save_word_metrics(
+            session_id=session_id,
+            word_of_the_day=analysis_result['word_of_the_day'],
+            top_ngrams=analysis_result['top_ngrams']
+        )
+        print(f"Word of the Day: '{analysis_result['word_of_the_day']}'")
+
+        # Run Ollama party summaries
+        print(f"Generating neutral party-by-party summaries...")
+        summaries = generate_all_party_summaries(parsed['speeches'])
+        for party_name, summary in summaries.items():
+            save_party_summary(session_id, party_name, summary, model_used='ollama')
+
+        print(f"Successfully processed and stored Hansard for {date_str}!")
+        return session_id
+
     except requests.RequestException as e:
         print(f"Error fetching {url}: {e}")
-        return []
+        return None
 
-def extract_date_from_url(url):
-    """Extract date from Hansard URL like /2026-05-14/hansard"""
-    match = re.search(r'/(\d{4})-(\d{2})-(\d{2})/hansard', url)
-    if match:
-        try:
-            year, month, day = match.groups()
-            return datetime(int(year), int(month), int(day)).date()
-        except ValueError:
-            return None
-    return None
-
-def parse_hansard_page(url):
-    """Parse individual Hansard page and extract content."""
-    try:
-        time.sleep(DELAY)
-        response = requests.get(url, headers=HEADERS, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        session_date = extract_date_from_url(url)
-
-        # Find the article and get the hansard content body field
-        article = soup.find('article', class_='node--type-hansard-document')
-        hansard_text = ""
-
-        if article:
-            # Get all body fields within the article
-            body_fields = article.find_all('div', class_='field--name-body')
-            # The second one (index 1) is the actual Hansard content
-            if len(body_fields) > 1:
-                hansard_text = body_fields[1].get_text(separator='\n', strip=True)
-
-        return session_date, hansard_text
-    except requests.RequestException as e:
-        print(f"Error parsing {url}: {e}")
-        return None, ""
-
-def store_raw_hansard(session_date, hansard_text, url):
-    """Store raw Hansard text for later processing."""
-    if not session_date or not hansard_text:
-        return
-
-    # Create a system speaker for raw content storage
-    system_party_id = insert_party("Ontario Legislature", "OLA")
-    system_speaker_id = insert_speaker("Official Record", system_party_id)
-
-    session_id = insert_session(session_date, url=url)
-    insert_speech(system_speaker_id, session_id, hansard_text)
-
-    print(f"Stored {len(hansard_text)} chars for {session_date}")
-
-def scrape_and_store_session(session_url):
-    """Main function: fetch session, scrape all Hansard pages, store data."""
-    print(f"Fetching Hansard links from {session_url}")
-    hansard_urls = scrape_hansard_list(session_url)
-    print(f"Found {len(hansard_urls)} Hansard pages")
-
-    for hansard_url in hansard_urls:
-        print(f"Parsing {hansard_url}")
-        session_date, hansard_text = parse_hansard_page(hansard_url)
-        if hansard_text:
-            store_raw_hansard(session_date, hansard_text, hansard_url)
+def backfill_recent_days(days_back=7):
+    """
+    Backfills Hansards for the last N days.
+    """
+    today = datetime.now().date()
+    for i in range(days_back):
+        target_date = today - timedelta(days=i)
+        # Skip weekends (Legislature sits Mon-Thu)
+        if target_date.weekday() >= 5:
+            continue
+        date_str = target_date.strftime('%Y-%m-%d')
+        print(f"\nChecking date {date_str}...")
+        fetch_and_process_date(date_str)
+        time.sleep(REQUEST_DELAY)
 
 if __name__ == "__main__":
-    session_url = "https://www.ola.org/en/legislative-business/house-documents/parliament-{}/session-{}".format(datetime.now().year, datetime.now().year)
-    scrape_and_store_session(session_url)
-
+    # Test with known sitting date e.g. 2026-06-02
+    test_date = "2026-06-02"
+    fetch_and_process_date(test_date, force_reprocess=True)

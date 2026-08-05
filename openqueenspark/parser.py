@@ -93,12 +93,15 @@ def parse_hansard_html(html_content, source_url=""):
     current_speech = None
     sequence = 0
 
-    # Find all paragraph, heading, or block tags inside main_body
-    # We query tags directly without container divs
-    elements = main_body.find_all(['h2', 'h3', 'p'])
-    if not elements:
-        elements = main_body.find_all(['div'])
+    # Find all headings first to build section map
+    for elem in main_body.find_all(['h2', 'h3']):
+        pass  # We'll track sections dynamically
 
+    # Get all elements that might contain speech content
+    # The structure: main_body has a div that contains ALL the content
+    # We need to iterate through ALL descendant elements in document order
+    elements = main_body.find_all(['h2', 'h3', 'p', 'div', 'span'])
+    
     for elem in elements:
         tag_name = elem.name
 
@@ -115,19 +118,31 @@ def parse_hansard_html(html_content, source_url=""):
                 current_h3 = text
             continue
 
+        # Check if this element itself has speakerStart or contains one directly
         speaker_el = elem.find(class_='speakerStart')
         timestamp_el = elem.find(class_='timeStamp')
         timestamp_str = timestamp_el.get_text(strip=True) if timestamp_el else None
 
-        if speaker_el:
+        # Only process if this element DIRECTLY contains the speakerStart
+        # (not if it's a parent container that happens to have one somewhere deep)
+        if speaker_el and (elem == speaker_el or speaker_el.parent == elem or elem.name in ['p', 'div']):
+            # Check if we already processed this speaker (avoid duplicates)
+            raw_speaker = speaker_el.get_text(strip=True)
+            
+            # Skip if this speaker was already processed (same text, same sequence area)
+            # We use a simple heuristic: if the element is a container that holds many speakers, skip
+            # Only process if the element's text is primarily this speaker
+            elem_text = elem.get_text(strip=True)
+            if len(elem_text) > len(raw_speaker) * 10:
+                # This is a container element with multiple speakers, skip
+                continue
+
             if current_speech and current_speech['text'].strip():
                 speeches.append(current_speech)
 
-            raw_speaker = speaker_el.get_text(strip=True)
             speaker_name, title = clean_speaker_name(raw_speaker)
             party_name, constituency = infer_party_and_constituency(speaker_name, title)
 
-            elem_text = elem.get_text(separator=' ', strip=True)
             speech_text = elem_text.replace(raw_speaker, '', 1).strip()
             if timestamp_str:
                 speech_text = speech_text.replace(timestamp_str, '', 1).strip()
@@ -145,7 +160,7 @@ def parse_hansard_html(html_content, source_url=""):
                 'timestamp': timestamp_str,
                 'sequence': sequence
             }
-        elif current_speech is not None:
+        elif current_speech is not None and elem.name == 'p' and not elem.find(class_='speakerStart'):
             p_text = elem.get_text(strip=True)
             if p_text:
                 current_speech['text'] += "\n\n" + p_text
@@ -160,3 +175,16 @@ def parse_hansard_html(html_content, source_url=""):
         'url': source_url,
         'speeches': speeches
     }
+
+if __name__ == '__main__':
+    import sys
+    sys.path.insert(0, '.')
+    sample_file = 'hansard_sample.html'
+    try:
+        with open(sample_file, 'r', encoding='utf-8') as f:
+            data = parse_hansard_html(f.read(), source_url="https://www.ola.org/en/legislative-business/house-documents/parliament-44/session-1/2026-05-14/hansard")
+            print(f"Parsed {len(data['speeches'])} speeches for date {data['date']}")
+            if data['speeches']:
+                print("First speech:", data['speeches'][0])
+    except FileNotFoundError:
+        print("Sample file not found for quick test.")
