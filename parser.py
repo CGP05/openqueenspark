@@ -78,14 +78,7 @@ def parse_hansard_html(html_content, source_url=""):
         session_number = int(s_match.group(1))
 
     body_fields = soup.find_all('div', class_='field--name-body')
-    main_body = None
-    for bf in body_fields:
-        if len(bf.get_text()) > 5000:
-            main_body = bf
-            break
-
-    if not main_body:
-        main_body = soup.find('article') or soup
+    main_body = body_fields[1] if len(body_fields) > 1 else (soup.find('article') or soup)
 
     current_h2 = "General Proceedings"
     current_h3 = ""
@@ -93,62 +86,63 @@ def parse_hansard_html(html_content, source_url=""):
     current_speech = None
     sequence = 0
 
-    # Find all paragraph, heading, or block tags inside main_body
-    # We query tags directly without container divs
-    elements = main_body.find_all(['h2', 'h3', 'p'])
-    if not elements:
-        elements = main_body.find_all(['div'])
-
-    for elem in elements:
-        tag_name = elem.name
-
-        if tag_name == 'h2':
-            text = elem.get_text(strip=True)
-            if text and len(text) < 150:
-                current_h2 = text
+    for elem in main_body.find_all(['h2', 'h3', 'p']):
+        if elem.name == 'h2':
+            txt = elem.get_text(strip=True)
+            if txt and len(txt) < 150:
+                current_h2 = txt
                 current_h3 = ""
             continue
 
-        if tag_name == 'h3':
-            text = elem.get_text(strip=True)
-            if text and len(text) < 200:
-                current_h3 = text
+        if elem.name == 'h3':
+            txt = elem.get_text(strip=True)
+            if txt and len(txt) < 200:
+                current_h3 = txt
             continue
 
-        speaker_el = elem.find(class_='speakerStart')
-        timestamp_el = elem.find(class_='timeStamp')
-        timestamp_str = timestamp_el.get_text(strip=True) if timestamp_el else None
+        if elem.name == 'p':
+            classes = elem.get('class', [])
+            strong = elem.find('strong')
 
-        if speaker_el:
-            if current_speech and current_speech['text'].strip():
-                speeches.append(current_speech)
+            # Check if this paragraph starts a new speech
+            if 'speakerStart' in classes or strong:
+                if strong and strong.get_text(strip=True):
+                    raw_speaker = strong.get_text(strip=True)
+                    full_text = elem.get_text(strip=True)
+                    speech_text = full_text.replace(raw_speaker, '', 1).strip()
 
-            raw_speaker = speaker_el.get_text(strip=True)
-            speaker_name, title = clean_speaker_name(raw_speaker)
-            party_name, constituency = infer_party_and_constituency(speaker_name, title)
+                    timestamp_el = elem.find(class_='timeStamp')
+                    timestamp_str = timestamp_el.get_text(strip=True) if timestamp_el else None
+                    if timestamp_str:
+                        speech_text = speech_text.replace(timestamp_str, '', 1).strip()
 
-            elem_text = elem.get_text(separator=' ', strip=True)
-            speech_text = elem_text.replace(raw_speaker, '', 1).strip()
-            if timestamp_str:
-                speech_text = speech_text.replace(timestamp_str, '', 1).strip()
+                    if current_speech and current_speech['text'].strip():
+                        speeches.append(current_speech)
 
-            sequence += 1
-            current_speech = {
-                'raw_speaker': raw_speaker,
-                'speaker_name': speaker_name,
-                'title': title,
-                'party_name': party_name,
-                'constituency': constituency,
-                'h2_heading': current_h2,
-                'h3_heading': current_h3,
-                'text': speech_text,
-                'timestamp': timestamp_str,
-                'sequence': sequence
-            }
-        elif current_speech is not None:
-            p_text = elem.get_text(strip=True)
-            if p_text:
-                current_speech['text'] += "\n\n" + p_text
+                    speaker_name, title = clean_speaker_name(raw_speaker)
+                    party_name, constituency = infer_party_and_constituency(speaker_name, title)
+
+                    sequence += 1
+                    current_speech = {
+                        'raw_speaker': raw_speaker,
+                        'speaker_name': speaker_name,
+                        'title': title,
+                        'party_name': party_name,
+                        'constituency': constituency,
+                        'h2_heading': current_h2,
+                        'h3_heading': current_h3,
+                        'text': speech_text,
+                        'timestamp': timestamp_str,
+                        'sequence': sequence
+                    }
+                elif current_speech:
+                    p_text = elem.get_text(strip=True)
+                    if p_text:
+                        current_speech['text'] += "\n\n" + p_text
+            elif current_speech:
+                p_text = elem.get_text(strip=True)
+                if p_text:
+                    current_speech['text'] += "\n\n" + p_text
 
     if current_speech and current_speech['text'].strip():
         speeches.append(current_speech)
@@ -160,3 +154,16 @@ def parse_hansard_html(html_content, source_url=""):
         'url': source_url,
         'speeches': speeches
     }
+
+if __name__ == '__main__':
+    import sys
+    sys.path.insert(0, '.')
+    sample_file = 'hansard_sample.html'
+    try:
+        with open(sample_file, 'r', encoding='utf-8') as f:
+            data = parse_hansard_html(f.read(), source_url="https://www.ola.org/en/legislative-business/house-documents/parliament-44/session-1/2026-05-14/hansard")
+            print(f"Parsed {len(data['speeches'])} speeches for date {data['date']}")
+            if data['speeches']:
+                print("First speech:", data['speeches'][0])
+    except FileNotFoundError:
+        print("Sample file not found for quick test.")
