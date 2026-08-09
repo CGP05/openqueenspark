@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
 import json
+import os
 import pandas as pd
 from PIL import Image
 
@@ -75,6 +76,19 @@ st.sidebar.title("🏛️ OpenQueensPark")
 st.sidebar.markdown("*Automated Ontario Legislature Analytics & AI Summaries*")
 st.sidebar.divider()
 
+# Sidebar API Keys Configuration
+with st.sidebar.expander("🔑 LLM API Settings (Gemini / OpenRouter)", expanded=False):
+    gemini_input = st.text_input("Google AI Studio API Key", type="password", value=os.getenv("GEMINI_API_KEY", ""))
+    openrouter_input = st.text_input("OpenRouter API Key", type="password", value=os.getenv("OPENROUTER_API_KEY", ""))
+
+    if gemini_input:
+        os.environ["GEMINI_API_KEY"] = gemini_input
+    if openrouter_input:
+        os.environ["OPENROUTER_API_KEY"] = openrouter_input
+
+    if gemini_input or openrouter_input:
+        st.success("API Key Active!")
+
 # Fetch Available Dates
 available_dates = get_available_session_dates()
 
@@ -108,8 +122,15 @@ metrics = get_word_metrics(selected_date_str)
 
 st.sidebar.divider()
 st.sidebar.subheader("⚙️ System Status")
-st.sidebar.success("Raspberry Pi Node: Online")
-st.sidebar.info("Ollama LLM Engine: Local (Llama-3)")
+st.sidebar.success("Database Status: Online")
+
+active_engine = "Rule-based Fallback"
+if os.getenv("GEMINI_API_KEY"):
+    active_engine = "Google AI Studio (Gemini 2.0)"
+elif os.getenv("OPENROUTER_API_KEY"):
+    active_engine = "OpenRouter AI"
+
+st.sidebar.info(f"AI Engine: {active_engine}")
 
 # Trigger manual fetch in sidebar
 with st.sidebar.expander("🔄 Scrape Specific Date"):
@@ -155,7 +176,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # TAB 1: AI Summaries
 with tab1:
     st.subheader("Daily Party-by-Party Summaries")
-    st.caption("Generated on-device via local LLM (Ollama) to ensure neutral, objective parliamentary oversight.")
+    st.caption("Generated via local or cloud AI models to ensure neutral, objective parliamentary oversight.")
 
     if summaries:
         party_colors = {
@@ -188,7 +209,7 @@ with tab2:
         if speeches:
             combined_text = " ".join([s['text'] for s in speeches])
             img_buf = generate_wordcloud_image(combined_text)
-            st.image(img_buf, use_container_width=True)
+            st.image(img_buf, width=600)
         else:
             st.info("No speech text available for Word Cloud.")
 
@@ -197,7 +218,7 @@ with tab2:
         if metrics and metrics.get('top_ngrams'):
             df_ngrams = pd.DataFrame(metrics['top_ngrams'])
             df_ngrams.columns = ["Phrase / Token", "Relative Score", "N-Gram Type"]
-            st.dataframe(df_ngrams, use_container_width=True, hide_index=True)
+            st.dataframe(df_ngrams, hide_index=True)
         else:
             st.info("No n-gram metrics available.")
 
@@ -257,8 +278,7 @@ with tab4:
     **OpenQueensPark** is an open-source civic-tech platform modeled after the federal [openparliament.ca](https://openparliament.ca).
     
     ### Key Features:
-    - **Local Hosting**: Runs autonomously on a local Raspberry Pi node.
-    - **No Paid APIs**: Utilizes on-device **Ollama** LLMs (`llama3`) for zero-cost, neutral daily summaries.
+    - **Local & Cloud AI**: Supports Google AI Studio (Gemini 2.0), OpenRouter API, or local Ollama for zero-cost, neutral summaries.
     - **Custom Tokenization**: Custom `ngram_iterator` for daily n-gram analysis and "Word of the Day" metrics.
     - **Secure Exposure**: Exposed securely to the web via **Cloudflare Tunnel** (`openqueenspark.ca`).
     - **Public Transparency**: Tracks political discourse in the Ontario Legislature with zero commercial tracking.
