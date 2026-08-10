@@ -5,12 +5,12 @@ import os
 import pandas as pd
 from PIL import Image
 
-from database import (
+from src.database import (
     create_tables, get_available_session_dates, get_speeches_for_session,
     get_party_summaries, get_word_metrics, insert_session
 )
-from analysis import generate_wordcloud_image
-from scraper import fetch_and_process_date
+from src.analysis import generate_wordcloud_image
+from src.scraper import fetch_and_process_date
 
 # Page Config
 st.set_page_config(

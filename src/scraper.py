@@ -5,13 +5,13 @@ import re
 import time
 import os
 
-from database import (
+from src.database import (
     create_tables, insert_session, insert_speaker, insert_speech,
     save_party_summary, save_word_metrics, get_connection
 )
-from parser import parse_hansard_html
-from analysis import analyze_speeches
-from summarizer import generate_all_party_summaries
+from src.parser import parse_hansard_html
+from src.analysis import analyze_speeches
+from src.summarizer import generate_all_party_summaries
 
 BASE_URL = "https://www.ola.org"
 HEADERS = {
