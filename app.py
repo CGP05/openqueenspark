@@ -179,16 +179,31 @@ with tab1:
     st.caption("Generated via local or cloud AI models to ensure neutral, objective parliamentary oversight.")
 
     if summaries:
+        # Ontario Legislature seat count order (44th Parliament): PC > NDP > Liberal > Green > Independent
+        PARTY_DISPLAY_ORDER = [
+            "Progressive Conservative",
+            "New Democratic Party", 
+            "Liberal",
+            "Green Party",
+            "Independent",
+            "Non-Partisan / Presiding Officer"
+        ]
+        
         party_colors = {
             "Progressive Conservative": "#003366",
             "New Democratic Party": "#FF6600",
             "Liberal": "#FF0000",
             "Green Party": "#009933",
-            "Independent": "#718096"
+            "Independent": "#718096",
+            "Non-Partisan / Presiding Officer": "#4A5568"
         }
 
+        # Sort summaries by seat count order
+        order_index = {party: i for i, party in enumerate(PARTY_DISPLAY_ORDER)}
+        sorted_summaries = sorted(summaries, key=lambda x: order_index.get(x['party_name'], 999))
+
         # Render each party summary in an expander / card
-        for summ in summaries:
+        for summ in sorted_summaries:
             party_name = summ['party_name']
             summary_text = summ['summary']
             color = party_colors.get(party_name, "#4A5568")
