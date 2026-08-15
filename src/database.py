@@ -3,7 +3,8 @@ import os
 import json
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+DB_PATH = os.getenv('DB_PATH', os.path.join(PROJECT_ROOT, 'database.db'))
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)

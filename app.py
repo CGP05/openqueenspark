@@ -71,7 +71,6 @@ st.markdown("""
 create_tables()
 
 # Sidebar Setup
-st.sidebar.image("https://www.ola.org/sites/default/files/common/image/Wordmark%20Asymmetrical%20Colour_English.svg", width=220)
 st.sidebar.title("🏛️ OpenQueensPark")
 st.sidebar.markdown("*Automated Ontario Legislature Analytics & AI Summaries*")
 st.sidebar.divider()
