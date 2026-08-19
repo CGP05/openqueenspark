@@ -17,24 +17,15 @@ BASE_URL = "https://www.ola.org"
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) OpenQueensPark/1.0 (Civic Tech Project; +https://openqueenspark.ca)'
 }
-REQUEST_DELAY = 1.5 # Respectful request delay for OLA servers
+REQUEST_DELAY = 1.0
 
 def construct_hansard_url(date_str, parliament=44, session=1):
-    """
-    Constructs canonical OLA Hansard URL for a given YYYY-MM-DD date.
-    Example: https://www.ola.org/en/legislative-business/house-documents/parliament-44/session-1/2026-06-02/hansard
-    """
     return f"{BASE_URL}/en/legislative-business/house-documents/parliament-{parliament}/session-{session}/{date_str}/hansard"
 
 def fetch_and_process_date(date_str, parliament=44, session_number=1, force_reprocess=False):
-    """
-    Fetches Hansard transcript for a date, parses speeches, runs analysis & Ollama summaries,
-    and saves all structured data to SQLite.
-    """
     create_tables()
     url = construct_hansard_url(date_str, parliament, session_number)
 
-    # Check if session already exists
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM sessions WHERE session_date = ?', (date_str,))
@@ -49,28 +40,27 @@ def fetch_and_process_date(date_str, parliament=44, session_number=1, force_repr
     try:
         response = requests.get(url, headers=HEADERS, timeout=20)
         if response.status_code == 404:
-            print(f"No Hansard document found for date {date_str} (Legislature was likely not sitting).")
+            print(f"No Hansard transcript available for {date_str} (House may not have been sitting).")
             return None
         response.raise_for_status()
 
         print(f"Parsing transcript content for {date_str}...")
-        parsed = parse_hansard_html(response.content, source_url=url)
+        parsed_data = parse_hansard_html(response.text, source_url=url)
+        speeches = parsed_data.get('speeches', [])
 
-        if not parsed['speeches']:
+        if not speeches:
             print(f"Warning: No speeches could be extracted for {date_str}.")
             return None
 
-        # Insert session record
         session_id = insert_session(date_str, parliament, session_number, url)
 
-        # Insert speakers and speeches
-        print(f"Inserting {len(parsed['speeches'])} speeches into database...")
-        for sp in parsed['speeches']:
+        print(f"Inserting {len(speeches)} speeches into database...")
+        for sp in speeches:
             speaker_id = insert_speaker(
                 name=sp['speaker_name'],
                 party_name=sp['party_name'],
-                constituency=sp['constituency'],
-                title=sp['title']
+                title=sp['title'],
+                constituency=sp['constituency']
             )
             insert_speech(
                 speaker_id=speaker_id,
@@ -82,21 +72,24 @@ def fetch_and_process_date(date_str, parliament=44, session_number=1, force_repr
                 sequence=sp['sequence']
             )
 
-        # Run text analysis & n-gram generation
         print(f"Running n-gram text analysis for {date_str}...")
-        analysis_result = analyze_speeches(parsed['speeches'])
+        metrics = analyze_speeches(speeches)
         save_word_metrics(
             session_id=session_id,
-            word_of_the_day=analysis_result['word_of_the_day'],
-            top_ngrams=analysis_result['top_ngrams']
+            word_of_the_day=metrics['word_of_the_day'],
+            top_ngrams=metrics['top_ngrams']
         )
-        print(f"Word of the Day: '{analysis_result['word_of_the_day']}'")
+        print(f"Word of the Day: '{metrics['word_of_the_day']}'")
 
-        # Run Ollama party summaries
-        print(f"Generating neutral party-by-party summaries...")
-        summaries = generate_all_party_summaries(parsed['speeches'])
-        for party_name, summary in summaries.items():
-            save_party_summary(session_id, party_name, summary, model_used='ollama')
+        print("Generating neutral party-by-party summaries...")
+        party_summaries = generate_all_party_summaries(speeches)
+        for party_name, summary_text in party_summaries.items():
+            save_party_summary(
+                session_id=session_id,
+                party_name=party_name,
+                summary=summary_text,
+                model_used="gemini/openrouter/fallback"
+            )
 
         print(f"Successfully processed and stored Hansard for {date_str}!")
         return session_id
@@ -105,22 +98,21 @@ def fetch_and_process_date(date_str, parliament=44, session_number=1, force_repr
         print(f"Error fetching {url}: {e}")
         return None
 
-def backfill_recent_days(days_back=7):
-    """
-    Backfills Hansards for the last N days.
-    """
-    today = datetime.now().date()
-    for i in range(days_back):
-        target_date = today - timedelta(days=i)
-        # Skip weekends (Legislature sits Mon-Thu)
-        if target_date.weekday() >= 5:
-            continue
-        date_str = target_date.strftime('%Y-%m-%d')
-        print(f"\nChecking date {date_str}...")
-        fetch_and_process_date(date_str)
+def backfill_known_dates():
+    known_sittings = [
+        "2026-06-02",
+        "2026-06-01",
+        "2026-05-28",
+        "2026-05-27",
+        "2026-05-26",
+        "2026-05-25",
+        "2026-05-14",
+        "2026-05-13"
+    ]
+    for d in known_sittings:
+        print(f"\nProcessing date {d}...")
+        fetch_and_process_date(d)
         time.sleep(REQUEST_DELAY)
 
 if __name__ == "__main__":
-    # Test with known sitting date e.g. 2026-06-02
-    test_date = "2026-06-02"
-    fetch_and_process_date(test_date, force_reprocess=True)
+    backfill_known_dates()
