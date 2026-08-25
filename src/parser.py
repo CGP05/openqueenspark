@@ -10,10 +10,7 @@ KNOWN_MPP_PARTIES = {
     "peter bethlenfalvy": ("Progressive Conservative", "Pickering—Uxbridge"),
     "paul calandra": ("Progressive Conservative", "Markham—Stouffville"),
     "marit stiles": ("New Democratic Party", "Davenport"),
-    "joel harden": ("New Democratic Party", "Ottawa Centre"),
-    "bhutila karpoche": ("New Democratic Party", "Parkdale—High Park"),
     "john fraser": ("Liberal", "Ottawa South"),
-    "bonnie crombie": ("Liberal", "Mississauga East—Cooksville"),
     "mike schreiner": ("Green Party", "Guelph"),
     "donna skelly": ("Non-Partisan / Presiding Officer", "Flamborough—Glanbrook"),
     "ted arnott": ("Non-Partisan / Presiding Officer", "Wellington—Halton Hills")
