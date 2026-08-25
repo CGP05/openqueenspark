@@ -4,7 +4,7 @@ from datetime import datetime
 
 # Common Ontario MPP party lookup heuristics
 KNOWN_MPP_PARTIES = {
-    "doug ford": ("Progressive Conservative", "Etobicoke Centre"),
+    "doug ford": ("Progressive Conservative", "Etobicoke North"),
     "steve clark": ("Progressive Conservative", "Leeds—Grenville—Thousand Islands and Rideau Lakes"),
     "sylvia jones": ("Progressive Conservative", "Dufferin—Caledon"),
     "peter bethlenfalvy": ("Progressive Conservative", "Pickering—Uxbridge"),
