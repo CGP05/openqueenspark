@@ -15,7 +15,7 @@ from src.summarizer import generate_all_party_summaries
 
 BASE_URL = "https://www.ola.org"
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) OpenQueensPark/1.0 (Civic Tech Project; +https://openqueenspark.ca)'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) OpenQueensPark/1.0 (Civic Tech Project; +/https://openqueenspark.streamlit.app/)'
 }
 REQUEST_DELAY = 1.0
 
