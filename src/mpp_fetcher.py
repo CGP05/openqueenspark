@@ -2,12 +2,18 @@
 MPP Data Fetcher for OpenQueensPark.
 Fetches ALL 124 current MPPs using the official OLA AJAX API endpoint.
 """
+import logging
 import re
 import time
+from typing import List, Dict
+
 import requests
 from bs4 import BeautifulSoup
-from typing import List, Dict
-from src.database import get_connection, insert_speaker, insert_party
+
+from src.database import get_db_connection, insert_speaker
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 OLA_BASE = "https://www.ola.org"
@@ -33,7 +39,7 @@ def fetch_current_mpps_via_ajax() -> List[Dict]:
     Fetch all 124 current MPPs using the OLA AJAX endpoint.
     This is the same endpoint the website uses to load the current members grid.
     """
-    print("Fetching current MPPs via OLA AJAX endpoint...")
+    logger.info("Fetching current MPPs via OLA AJAX endpoint...")
     
     # These values come from the page's drupalSettings
     ajax_data = {
@@ -60,7 +66,7 @@ def fetch_current_mpps_via_ajax() -> List[Dict]:
             break
     
     if not html:
-        print("Could not find HTML in AJAX response")
+        logger.error("Could not find HTML in AJAX response")
         return []
     
     soup = BeautifulSoup(html, 'html.parser')
@@ -69,7 +75,7 @@ def fetch_current_mpps_via_ajax() -> List[Dict]:
     links = soup.find_all('a', href=True)
     mpp_links = [l for l in links if '/en/members/all/' in l.get('href', '')]
     
-    print(f"Found {len(mpp_links)} current MPPs via AJAX")
+    logger.info(f"Found {len(mpp_links)} current MPPs via AJAX")
     
     mpps = []
     for link in mpp_links:
@@ -103,6 +109,7 @@ def fetch_mpp_profile(mpp: Dict) -> Dict:
     try:
         response = requests.get(profile_url, headers=HEADERS, timeout=15)
         if response.status_code != 200:
+            logger.warning(f"Failed to fetch profile for {mpp['name']}: HTTP {response.status_code}")
             return mpp
         
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -135,7 +142,7 @@ def fetch_mpp_profile(mpp: Dict) -> Dict:
         
         # Extract photo URL
         photo_url = ''
-        img = soup.find('img', alt=re.compile(mpp['name'], re.I))
+        img = soup.find('img', alt=re.compile(re.escape(mpp['name']), re.I))
         if not img:
             img = soup.find('img', class_=re.compile(r'photo|headshot|portrait', re.I))
         if img:
@@ -158,7 +165,7 @@ def fetch_mpp_profile(mpp: Dict) -> Dict:
         
         # Extract website
         website = None
-        website_link = soup.find('a', href=re.compile(r'^https?://(?!www\.ola\.org|https://www\.ola\.org)'))
+        website_link = soup.find('a', href=re.compile(r'^https?://(?!www\.ola\.org).+'))
         if website_link:
             website = website_link.get('href')
         
@@ -172,8 +179,8 @@ def fetch_mpp_profile(mpp: Dict) -> Dict:
         })
         
     except Exception as e:
-        print(f"  Error fetching profile for {mpp['name']}: {e}")
-    
+        logger.error(f"Error fetching profile for {mpp['name']}: {e}")
+
     return mpp
 
 
@@ -195,38 +202,43 @@ def sync_mpps_to_database(mpps: List[Dict]) -> int:
             )
             count += 1
         except Exception as e:
-            print(f"Error syncing MPP {mpp['name']}: {e}")
-    
-    print(f"Synced {count} MPPs to database successfully.")
+            logger.error(f"Error syncing MPP {mpp['name']}: {e}")
+
+    logger.info(f"Synced {count} MPPs to database successfully.")
     return count
 
 
 def auto_update_mpps():
-    print("Step 1: Fetching current MPPs via AJAX...")
+    """Main function to fetch and sync all MPP data."""
+    logger.info("Step 1: Fetching current MPPs via AJAX...")
     mpps = fetch_current_mpps_via_ajax()
-    print(f"  Found {len(mpps)} current MPPs")
-    
+    logger.info(f"Found {len(mpps)} current MPPs")
+
     if not mpps:
-        print("No MPPs fetched!")
+        logger.error("No MPPs fetched!")
         return
-    
-    print("Step 2: Fetching detailed profile info...")
+
+    logger.info("Step 2: Fetching detailed profile info...")
     for i, mpp in enumerate(mpps):
-        print(f"  [{i+1}/{len(mpps)}] Fetching profile for {mpp['name']}...")
+        logger.info(f"  [{i+1}/{len(mpps)}] Fetching profile for {mpp['name']}...")
         mpps[i] = fetch_mpp_profile(mpp)
         time.sleep(0.2)  # Be respectful
-    
-    print("Step 3: Syncing to database...")
+
+    logger.info("Step 3: Syncing to database...")
     sync_mpps_to_database(mpps)
-    
+
     # Print summary
-    from src.database import get_connection
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute('SELECT p.name as party, COUNT(s.id) as count FROM speakers s LEFT JOIN parties p ON s.party_id = p.id GROUP BY p.name ORDER BY count DESC')
-    for row in c.fetchall():
-        print(f"  {row['party']}: {row['count']}")
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT p.name as party, COUNT(s.id) as count
+            FROM speakers s
+            LEFT JOIN parties p ON s.party_id = p.id
+            GROUP BY p.name
+            ORDER BY count DESC
+        ''')
+        for row in cursor.fetchall():
+            logger.info(f"  {row['party']}: {row['count']}")
 
 
 if __name__ == '__main__':

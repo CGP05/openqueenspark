@@ -1,18 +1,46 @@
 import sqlite3
 import os
 import json
+import logging
+from contextlib import contextmanager
 from datetime import datetime
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DB_PATH = os.getenv('DB_PATH', os.path.join(PROJECT_ROOT, 'database.db'))
 
+
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
 def get_connection():
+    """Legacy function for backward compatibility."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-def create_tables():
-    conn = get_connection()
+
+def with_connection(func):
+    """Decorator that wraps a function with automatic connection management."""
+    def wrapper(*args, **kwargs):
+        with get_db_connection() as conn:
+            result = func(conn, *args, **kwargs)
+            conn.commit()
+            return result
+    return wrapper
+
+@with_connection
+def create_tables(conn):
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -273,38 +301,31 @@ def insert_speaker(name, party_name=None, constituency=None, title=None, email=N
     conn.close()
     return speaker_id
 
-def insert_session(session_date, parliament=44, session_number=1, url=None):
-    conn = get_connection()
+@with_connection
+def insert_session(conn, session_date, parliament=44, session_number=1, url=None):
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM sessions WHERE session_date = ?', (str(session_date),))
     row = cursor.fetchone()
     if row:
-        conn.close()
         return row['id']
 
     cursor.execute('''
         INSERT INTO sessions (session_date, parliament, session_number, url)
         VALUES (?, ?, ?, ?)
     ''', (str(session_date), parliament, session_number, url))
-    conn.commit()
-    session_id = cursor.lastrowid
-    conn.close()
-    return session_id
+    return cursor.lastrowid
 
-def insert_speech(speaker_id, session_id, text, h2_heading=None, h3_heading=None, timestamp=None, sequence=0):
-    conn = get_connection()
+@with_connection
+def insert_speech(conn, speaker_id, session_id, text, h2_heading=None, h3_heading=None, timestamp=None, sequence=0):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO speeches (speaker_id, session_id, text, h2_heading, h3_heading, timestamp, sequence)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (speaker_id, session_id, text, h2_heading, h3_heading, timestamp, sequence))
-    conn.commit()
-    speech_id = cursor.lastrowid
-    conn.close()
-    return speech_id
+    return cursor.lastrowid
 
-def save_party_summary(session_id, party_name, summary, model_used='ollama'):
-    conn = get_connection()
+@with_connection
+def save_party_summary(conn, session_id, party_name, summary, model_used='ollama'):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO party_summaries (session_id, party_name, summary, model_used)
@@ -314,11 +335,10 @@ def save_party_summary(session_id, party_name, summary, model_used='ollama'):
             model_used=excluded.model_used,
             created_at=CURRENT_TIMESTAMP
     ''', (session_id, party_name, summary, model_used))
-    conn.commit()
-    conn.close()
 
-def save_word_metrics(session_id, word_of_the_day, top_ngrams):
-    conn = get_connection()
+
+@with_connection
+def save_word_metrics(conn, session_id, word_of_the_day, top_ngrams):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO word_metrics (session_id, word_of_the_day, top_ngrams_json)
@@ -328,19 +348,17 @@ def save_word_metrics(session_id, word_of_the_day, top_ngrams):
             top_ngrams_json=excluded.top_ngrams_json,
             created_at=CURRENT_TIMESTAMP
     ''', (session_id, word_of_the_day, json.dumps(top_ngrams)))
-    conn.commit()
-    conn.close()
 
-def get_available_session_dates():
-    conn = get_connection()
+@with_connection
+def get_available_session_dates(conn):
     cursor = conn.cursor()
     cursor.execute('SELECT session_date FROM sessions ORDER BY session_date DESC')
     rows = cursor.fetchall()
-    conn.close()
     return [r['session_date'] for r in rows]
 
-def get_speeches_for_session(session_date):
-    conn = get_connection()
+
+@with_connection
+def get_speeches_for_session(conn, session_date):
     cursor = conn.cursor()
     cursor.execute('''
         SELECT sp.id, s.name as speaker_name, p.name as party_name, p.abbreviation as party_abbr,
@@ -354,11 +372,11 @@ def get_speeches_for_session(session_date):
         ORDER BY sp.sequence ASC
     ''', (str(session_date),))
     rows = [dict(r) for r in cursor.fetchall()]
-    conn.close()
     return rows
 
-def get_party_summaries(session_date):
-    conn = get_connection()
+
+@with_connection
+def get_party_summaries(conn, session_date):
     cursor = conn.cursor()
     cursor.execute('''
         SELECT ps.party_name, ps.summary, ps.model_used, p.color, p.abbreviation
@@ -368,11 +386,11 @@ def get_party_summaries(session_date):
         WHERE ss.session_date = ?
     ''', (str(session_date),))
     rows = [dict(r) for r in cursor.fetchall()]
-    conn.close()
     return rows
 
-def get_word_metrics(session_date):
-    conn = get_connection()
+
+@with_connection
+def get_word_metrics(conn, session_date):
     cursor = conn.cursor()
     cursor.execute('''
         SELECT wm.word_of_the_day, wm.top_ngrams_json
@@ -381,7 +399,6 @@ def get_word_metrics(session_date):
         WHERE ss.session_date = ?
     ''', (str(session_date),))
     row = cursor.fetchone()
-    conn.close()
     if row:
         return {
             'word_of_the_day': row['word_of_the_day'],
@@ -582,22 +599,22 @@ def search_speeches(query, limit=20, session_date=None):
     cursor = conn.cursor()
     if session_date:
         cursor.execute('''
-            SELECT s.*, sp.text as snippet, bm.rank
+            SELECT s.*, sp.text as snippet
             FROM speeches_fts sp
             JOIN speeches s ON sp.speech_id = s.id
             JOIN sessions ss ON s.session_id = ss.id
             WHERE speeches_fts MATCH ? AND ss.session_date = ?
-            ORDER BY bm.rank
+            ORDER BY sp.rank
             LIMIT ?
         ''', (query, str(session_date), limit))
     else:
         cursor.execute('''
-            SELECT s.*, sp.text as snippet, bm.rank
+            SELECT s.*, sp.text as snippet
             FROM speeches_fts sp
             JOIN speeches s ON sp.speech_id = s.id
             JOIN sessions ss ON s.session_id = ss.id
             WHERE speeches_fts MATCH ?
-            ORDER BY bm.rank
+            ORDER BY sp.rank
             LIMIT ?
         ''', (query, limit))
     rows = [dict(r) for r in cursor.fetchall()]

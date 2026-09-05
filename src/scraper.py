@@ -1,60 +1,76 @@
+import logging
+import time
+
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
-import re
-import time
-import os
 
 from src.database import (
-    create_tables, insert_session, insert_speaker, insert_speech,
-    save_party_summary, save_word_metrics, get_connection
+    create_tables,
+    get_db_connection,
+    insert_session,
+    insert_speaker,
+    insert_speech,
+    save_party_summary,
+    save_word_metrics,
 )
 from src.parser import parse_hansard_html
 from src.analysis import analyze_speeches
 from src.summarizer import generate_all_party_summaries
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 BASE_URL = "https://www.ola.org"
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) OpenQueensPark/1.0 (Civic Tech Project; +/https://openqueenspark.streamlit.app/)'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) OpenQueensPark/1.0 (Civic Tech Project; +https://openqueenspark.streamlit.app/)'
 }
 REQUEST_DELAY = 1.0
 
+
 def construct_hansard_url(date_str, parliament=44, session=1):
+    """Construct the official OLA Hansard URL for a given date."""
     return f"{BASE_URL}/en/legislative-business/house-documents/parliament-{parliament}/session-{session}/{date_str}/hansard"
 
+
 def fetch_and_process_date(date_str, parliament=44, session_number=1, force_reprocess=False):
+    """
+    Fetch, parse, analyze, and store Hansard data for a given date.
+
+    Returns:
+        int: session_id if successful, None otherwise.
+    """
     create_tables()
     url = construct_hansard_url(date_str, parliament, session_number)
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT id FROM sessions WHERE session_date = ?', (date_str,))
-    existing_session = cursor.fetchone()
-    conn.close()
+    # Check if session already exists
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM sessions WHERE session_date = ?', (date_str,))
+        existing_session = cursor.fetchone()
 
     if existing_session and not force_reprocess:
-        print(f"Session for {date_str} already exists in database. Skipping fetch.")
+        logger.info(f"Session for {date_str} already exists in database. Skipping fetch.")
         return existing_session['id']
 
-    print(f"Fetching Hansard from OLA: {url}")
+    logger.info(f"Fetching Hansard from OLA: {url}")
     try:
         response = requests.get(url, headers=HEADERS, timeout=20)
         if response.status_code == 404:
-            print(f"No Hansard transcript available for {date_str} (House may not have been sitting).")
+            logger.info(f"No Hansard transcript available for {date_str} (House may not have been sitting).")
             return None
         response.raise_for_status()
 
-        print(f"Parsing transcript content for {date_str}...")
+        logger.info(f"Parsing transcript content for {date_str}...")
         parsed_data = parse_hansard_html(response.text, source_url=url)
         speeches = parsed_data.get('speeches', [])
 
         if not speeches:
-            print(f"Warning: No speeches could be extracted for {date_str}.")
+            logger.warning(f"No speeches could be extracted for {date_str}.")
             return None
 
         session_id = insert_session(date_str, parliament, session_number, url)
 
-        print(f"Inserting {len(speeches)} speeches into database...")
+        logger.info(f"Inserting {len(speeches)} speeches into database...")
         for sp in speeches:
             speaker_id = insert_speaker(
                 name=sp['speaker_name'],
@@ -72,16 +88,16 @@ def fetch_and_process_date(date_str, parliament=44, session_number=1, force_repr
                 sequence=sp['sequence']
             )
 
-        print(f"Running n-gram text analysis for {date_str}...")
+        logger.info(f"Running n-gram text analysis for {date_str}...")
         metrics = analyze_speeches(speeches)
         save_word_metrics(
             session_id=session_id,
             word_of_the_day=metrics['word_of_the_day'],
             top_ngrams=metrics['top_ngrams']
         )
-        print(f"Word of the Day: '{metrics['word_of_the_day']}'")
+        logger.info(f"Word of the Day: '{metrics['word_of_the_day']}'")
 
-        print("Generating neutral party-by-party summaries...")
+        logger.info("Generating neutral party-by-party summaries...")
         party_summaries = generate_all_party_summaries(speeches)
         for party_name, summary_text in party_summaries.items():
             save_party_summary(
@@ -91,14 +107,16 @@ def fetch_and_process_date(date_str, parliament=44, session_number=1, force_repr
                 model_used="gemini/openrouter/fallback"
             )
 
-        print(f"Successfully processed and stored Hansard for {date_str}!")
+        logger.info(f"Successfully processed and stored Hansard for {date_str}!")
         return session_id
 
     except requests.RequestException as e:
-        print(f"Error fetching {url}: {e}")
+        logger.error(f"Error fetching {url}: {e}")
         return None
 
+
 def backfill_known_dates():
+    """Backfill a list of known sitting dates from the OLA calendar."""
     known_sittings = [
         "2026-06-02",
         "2026-06-01",
@@ -110,9 +128,10 @@ def backfill_known_dates():
         "2026-05-13"
     ]
     for d in known_sittings:
-        print(f"\nProcessing date {d}...")
+        logger.info(f"Processing date {d}...")
         fetch_and_process_date(d)
         time.sleep(REQUEST_DELAY)
+
 
 if __name__ == "__main__":
     backfill_known_dates()
