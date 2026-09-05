@@ -19,6 +19,10 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     try:
         yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -33,10 +37,17 @@ def get_connection():
 def with_connection(func):
     """Decorator that wraps a function with automatic connection management."""
     def wrapper(*args, **kwargs):
-        with get_db_connection() as conn:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        try:
             result = func(conn, *args, **kwargs)
             conn.commit()
             return result
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
     return wrapper
 
 @with_connection
@@ -236,9 +247,6 @@ def create_tables(conn):
             INSERT OR IGNORE INTO parties (name, abbreviation, color)
             VALUES (?, ?, ?)
         ''', (name, abbr, color))
-
-    conn.commit()
-    conn.close()
 
 def insert_party(name, abbreviation=None, color=None):
     conn = get_connection()
