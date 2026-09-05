@@ -8,10 +8,9 @@ logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
 DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 
-SYSTEM_PROMPT = """You are a neutral, objective parliamentary analyst for OpenQueensPark.
+SYSTEM_PROMPT = """You are a neutral, non-partisan, objective parliamentary analyst for OpenQueensPark.
 Your task is to summarize the daily proceedings of the Legislative Assembly of Ontario.
 You must provide a strictly neutral, factual, party-by-party summary without political bias or commentary.
 Highlight key legislative proposals, question period inquiries, and major debate points raised by each party.
@@ -87,27 +86,6 @@ def generate_summary_openrouter(party_name, speech_text, api_key=OPENROUTER_API_
         logger.error(f"OpenRouter API error: {e}")
     return None
 
-def generate_summary_ollama(party_name, speech_text, model=DEFAULT_OLLAMA_MODEL):
-    """
-    Calls local Ollama API.
-    """
-    prompt = f"{SYSTEM_PROMPT}\n\nParty: {party_name}\nSpeeches recorded today:\n{speech_text}\n\nProvide a 3-4 paragraph neutral summary of {party_name}'s key positions, questions, and statements made today in the Ontario Legislature."
-
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.3}
-    }
-
-    try:
-        response = requests.post(OLLAMA_API_URL, json=payload, timeout=15)
-        if response.status_code == 200:
-            return response.json().get('response', '').strip()
-    except Exception:
-        pass
-    return None
-
 def generate_fallback_summary(party_name, speeches):
     total_speeches = len(speeches)
     speakers = set(sp.get('speaker_name', 'MPP') for sp in speeches)
@@ -150,10 +128,6 @@ def generate_party_summary(party_name, speeches):
         if res:
             return res
 
-    # Priority 3: Local Ollama
-    res = generate_summary_ollama(party_name, speech_text)
-    if res:
-        return res
 
     # Priority 4: Rule-based fallback
     return generate_fallback_summary(party_name, speeches)

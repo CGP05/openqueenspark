@@ -2,19 +2,7 @@ import re
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-# Common Ontario MPP party lookup heuristics
-KNOWN_MPP_PARTIES = {
-    "doug ford": ("Progressive Conservative", "Etobicoke North"),
-    "steve clark": ("Progressive Conservative", "Leeds—Grenville—Thousand Islands and Rideau Lakes"),
-    "sylvia jones": ("Progressive Conservative", "Dufferin—Caledon"),
-    "peter bethlenfalvy": ("Progressive Conservative", "Pickering—Uxbridge"),
-    "paul calandra": ("Progressive Conservative", "Markham—Stouffville"),
-    "marit stiles": ("New Democratic Party", "Davenport"),
-    "john fraser": ("Liberal", "Ottawa South"),
-    "mike schreiner": ("Green Party", "Guelph"),
-    "donna skelly": ("Non-Partisan / Presiding Officer", "Flamborough—Glanbrook"),
-    "ted arnott": ("Non-Partisan / Presiding Officer", "Wellington—Halton Hills")
-}
+
 
 def clean_speaker_name(raw_name):
     if not raw_name:

@@ -6,8 +6,8 @@ from operator import itemgetter
 from wordcloud import WordCloud
 import io
 
-STOPWORDS = frozenset([
-    "i", "me", "my", "myself", "we", "our", "ours", "ourselves",
+#copied from openparliament
+STOPWORDS = frozenset(["i", "me", "my", "myself", "we", "our", "ours", "ourselves",
     "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself",
     "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their",
     "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these",
@@ -19,16 +19,15 @@ STOPWORDS = frozenset([
     "again", "further", "then", "once", "here", "there", "when", "where", "why", "how",
     "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no",
     "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can",
-    "will", "just", "don", "should", "now", "it's", "we're", "we'll", "they're", "can't",
-    "won't", "isn't", "don't", "he's", "she's", "i'm", "aren't", "government", "house",
-    "committee", "would", "speaker", "motion", "mr", "mrs", "ms", "member", "minister",
-    "canada", "members", "time", "prime", "one", "parliament", "us", "bill", "act",
-    "like", "canadians", "people", "said", "want", "could", "issue", "today", "hon",
-    "order", "party", "canadian", "think", "also", "new", "get", "many", "say", "look",
-    "country", "legislation", "law", "department", "two", "day", "days", "madam", "must",
-    "that's", "okay", "thank", "really", "much", "there's", "yes", "no", "ontario",
-    "mpp", "assembly", "legislative", "province", "provincial", "premier", "queenvs",
-    "park", "queens"
+    "will", "just", "don", "should", "now", # this is the nltk stopwords list
+    "it's", "we're", "we'll", "they're", "can't", "won't", "isn't", "don't", "he's",
+    "she's", "i'm", "aren't", "government", "house", 'committee', 'would', 'speaker',
+    'motion', 'mr', 'mrs', 'ms', 'member', 'minister', 'canada', 'members', 'time',
+    'prime', 'one', 'parliament', 'us', 'bill', 'act', 'like', 'canadians', 'people',
+    'said', 'want', 'could', 'issue', 'today', 'hon', 'order', 'party', 'canadian',
+    'think', 'also', 'new', 'get', 'many', 'say', 'look', 'country', 'legislation',
+    'law', 'department', 'two', 'day', 'days', 'madam', 'must', "that's", "okay",
+    "thank", "really", "much", "there's", 'yes', 'no'
 ])
 
 r_punctuation = re.compile(r"[^\s\w0-9'’—-]", re.UNICODE)
