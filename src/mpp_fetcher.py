@@ -5,7 +5,6 @@ Fetches ALL 124 current MPPs using the official OLA AJAX API endpoint.
 import logging
 import re
 import time
-from typing import List, Dict
 
 import requests
 from bs4 import BeautifulSoup
@@ -34,7 +33,7 @@ PARTY_NAME_MAP = {
 }
 
 
-def fetch_current_mpps_via_ajax() -> List[Dict]:
+def fetch_current_mpps_via_ajax() -> list[dict]:
     """
     Fetch all 124 current MPPs using the OLA AJAX endpoint.
     This is the same endpoint the website uses to load the current members grid.
@@ -98,7 +97,7 @@ def fetch_current_mpps_via_ajax() -> List[Dict]:
     return mpps
 
 
-def fetch_mpp_profile(mpp: Dict) -> Dict:
+def fetch_mpp_profile(mpp: dict) -> dict:
     """
     Fetch detailed profile info for a single MPP.
     """
@@ -184,7 +183,7 @@ def fetch_mpp_profile(mpp: Dict) -> Dict:
     return mpp
 
 
-def sync_mpps_to_database(mpps: List[Dict]) -> int:
+def sync_mpps_to_database(mpps: list[dict]) -> int:
     """
     Sync fetched MPPs to the local database.
     """
