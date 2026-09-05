@@ -26,268 +26,238 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-    /* Root colors - OpenParliament theme */
-    :root {
-        --primary-teal: #2C5282;
-        --light-teal: #4A90A4;
-        --accent-blue: #1E40AF;
-        --light-bg: #F8FAFC;
-        --text-dark: #1A202C;
-        --text-grey: #4A5568;
-        --border-light: #E2E8F0;
+    /* Override Streamlit's dark theme - CRITICAL */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"], .main {
+        background-color: #FFFFFF !important;
+        color: #1A202C !important;
     }
     
-    /* Hide Streamlit branding */
-    .stAppHeader { display: none; }
+    /* Hide Streamlit elements */
+    [data-testid="stAppHeader"] { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    .stApp { background-color: #FFFFFF !important; }
     
-    /* Main navigation bar */
+    /* Main container styling */
+    [data-testid="stMainBlockContainer"] {
+        background-color: #FFFFFF !important;
+        padding: 0 !important;
+    }
+    
+    /* Remove default padding from main */
+    .main {
+        background-color: #FFFFFF !important;
+    }
+    
+    /* Navigation bar - Full width */
     .navbar {
         background: linear-gradient(90deg, #2C5282 0%, #2D5A8C 100%);
-        padding: 1rem 2rem;
-        margin: -3rem -3rem 2rem -3rem;
+        padding: 1.25rem 2.5rem;
+        margin: -6rem -3rem 3rem -3rem !important;
         color: white;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        width: calc(100% + 6rem);
+        position: relative;
+        left: -3rem;
     }
     
     .navbar-brand {
-        font-size: 1.5rem;
-        font-weight: 700;
+        font-size: 1.6rem;
+        font-weight: 800;
         letter-spacing: -0.5px;
     }
     
     .navbar-menu {
         display: flex;
-        gap: 2rem;
+        gap: 2.5rem;
         font-size: 0.95rem;
+        font-weight: 500;
     }
     
-    .navbar-menu a {
-        color: white;
-        text-decoration: none;
-        transition: opacity 0.2s;
-    }
-    
-    .navbar-menu a:hover {
-        opacity: 0.8;
-    }
-    
-    /* Header section */
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
+    /* Content area - white background */
+    .content-wrapper {
+        background: #FFFFFF;
         color: #1A202C;
-        margin-bottom: 0.3rem;
-        letter-spacing: -0.5px;
+    }
+    
+    /* Headers */
+    .main-header {
+        font-size: 3rem;
+        font-weight: 800;
+        color: #1A202C;
+        margin: 2rem 0 0.5rem 0;
+        letter-spacing: -1px;
     }
     
     .sub-header {
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         color: #718096;
-        margin-bottom: 2rem;
+        margin-bottom: 3rem;
         font-weight: 400;
     }
     
     .tagline {
-        font-size: 1.8rem;
-        font-weight: 600;
+        font-size: 2.2rem;
+        font-weight: 700;
         color: #1A202C;
-        margin: 2rem 0 1.5rem 0;
+        margin: 2.5rem 0 2rem 0;
         text-align: center;
     }
     
-    .search-section {
-        background: #F8FAFC;
-        padding: 2rem;
-        border-radius: 8px;
-        text-align: center;
-        margin: 2rem 0;
-        border: 1px solid #E2E8F0;
-    }
-    
-    .search-section input {
-        width: 100%;
-        max-width: 600px;
-        padding: 0.75rem 1rem;
-        font-size: 1rem;
-        border: 1px solid #CBD5E0;
-        border-radius: 4px;
-    }
-    
-    /* Section styling */
-    .section-header {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: #1A202C;
-        border-bottom: 3px solid #2C5282;
-        padding-bottom: 0.75rem;
-        margin: 2.5rem 0 1.5rem 0;
-    }
-    
-    .subsection-header {
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: #2D3748;
-        margin: 1.5rem 0 1rem 0;
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid #E2E8F0;
-    }
-    
-    .topic-header {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #2D3748;
-        margin: 1.25rem 0 0.75rem 0;
-    }
-    
-    /* Party blocks */
-    .party-block {
-        margin: 1rem 0 1.25rem 0;
-        padding: 1.25rem;
-        border-radius: 6px;
-        background-color: #FFFFFF;
-        border-left: 5px solid;
-        border: 1px solid #E2E8F0;
-        border-left: 5px solid;
-        transition: box-shadow 0.2s;
-    }
-    
-    .party-block:hover {
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    }
-    
-    .party-name {
-        font-weight: 700;
-        font-size: 1rem;
-        margin-bottom: 0.75rem;
-    }
-    
-    .party-text {
-        font-size: 0.95rem;
-        line-height: 1.6;
-        color: #2D3748;
-    }
-    
-    /* Speech items */
-    .speech-item {
-        margin: 1rem 0;
-        padding: 1rem 1.25rem;
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 6px;
-        transition: all 0.2s;
-    }
-    
-    .speech-item:hover {
-        border-color: #2C5282;
-        box-shadow: 0 2px 8px rgba(44, 82, 130, 0.1);
-    }
-    
-    .speech-meta {
-        font-size: 0.85rem;
-        color: #718096;
-        margin-bottom: 0.6rem;
-        font-weight: 500;
-    }
-    
-    .speaker-name {
-        font-weight: 700;
-        color: #1A202C;
-    }
-    
-    .speech-text {
-        font-size: 0.95rem;
-        line-height: 1.6;
-        color: #2D3748;
-    }
-    
-    /* Word of the day badge */
-    .word-of-day-section {
-        background: linear-gradient(135deg, #2C5282 0%, #4A90A4 100%);
-        color: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        text-align: center;
-        margin: 1.5rem 0;
-    }
-    
-    .word-of-day-label {
-        font-size: 0.9rem;
-        font-weight: 600;
-        opacity: 0.9;
-        margin-bottom: 0.5rem;
-    }
-    
-    .word-of-day-badge {
-        font-size: 2rem;
-        font-weight: 700;
-        letter-spacing: 1px;
-    }
-    
-    /* Disclaimer box */
+    /* Disclaimer box - matches openparliament */
     .disclaimer {
         background: #FEF2F2;
         border: 1px solid #FECACA;
-        border-left: 4px solid #DC2626;
+        border-left: 5px solid #DC2626;
         border-radius: 6px;
-        padding: 1rem 1.25rem;
-        margin: 2rem 0;
-        font-size: 0.9rem;
+        padding: 1.25rem 1.5rem;
+        margin: 2rem 0 2.5rem 0;
+        font-size: 0.95rem;
         color: #7F1D1D;
-        line-height: 1.5;
+        line-height: 1.6;
     }
     
     .disclaimer strong {
         font-weight: 700;
     }
     
-    /* Stats grid */
+    /* Stats cards */
     .stat-card {
-        background: #F8FAFC;
+        background: #FFFFFF;
         border: 1px solid #E2E8F0;
-        border-radius: 6px;
-        padding: 1.5rem;
+        border-radius: 8px;
+        padding: 2rem 1.5rem;
         text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
     
     .stat-value {
-        font-size: 2rem;
-        font-weight: 700;
+        font-size: 2.5rem;
+        font-weight: 800;
         color: #2C5282;
         margin: 0.5rem 0;
     }
     
     .stat-label {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: #718096;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
     }
     
-    /* Bill items */
-    .bill-item {
-        margin: 1rem 0;
-        padding: 1rem 1.25rem;
-        background: #F0FDF4;
-        border: 1px solid #BBDFC2;
-        border-radius: 6px;
-        border-left: 4px solid #16A34A;
+    /* Word of the day section */
+    .word-of-day-section {
+        background: linear-gradient(135deg, #2C5282 0%, #4A90A4 100%);
+        color: white;
+        padding: 2rem 1.5rem;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(44, 82, 130, 0.2);
     }
     
-    .bill-title {
+    .word-of-day-label {
+        font-size: 0.85rem;
         font-weight: 700;
-        color: #166534;
-        font-size: 1rem;
+        opacity: 0.95;
+        margin-bottom: 0.75rem;
+        letter-spacing: 1px;
     }
     
-    .bill-desc {
-        font-size: 0.9rem;
+    .word-of-day-badge {
+        font-size: 2.2rem;
+        font-weight: 800;
+        letter-spacing: 1px;
+    }
+    
+    /* Divider */
+    .divider {
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #E2E8F0, transparent);
+        margin: 3rem 0;
+    }
+    
+    /* Section headers */
+    .section-header {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #1A202C;
+        border-bottom: 3px solid #2C5282;
+        padding-bottom: 1rem;
+        margin: 3rem 0 2rem 0;
+    }
+    
+    .subsection-header {
+        font-size: 1.25rem;
+        font-weight: 700;
         color: #2D3748;
-        margin-top: 0.5rem;
-        line-height: 1.5;
+        margin: 1.5rem 0 1rem 0;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #E2E8F0;
+    }
+    
+    /* Party blocks */
+    .party-block {
+        margin: 1.25rem 0;
+        padding: 1.5rem;
+        border-radius: 8px;
+        background-color: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-left: 5px solid;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    
+    .party-block:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .party-name {
+        font-weight: 800;
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .party-text {
+        font-size: 0.95rem;
+        line-height: 1.7;
+        color: #2D3748;
+    }
+    
+    /* Speech items */
+    .speech-item {
+        margin: 1rem 0;
+        padding: 1.25rem;
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    
+    .speech-item:hover {
+        border-color: #2C5282;
+        box-shadow: 0 4px 12px rgba(44, 82, 130, 0.15);
+    }
+    
+    .speech-meta {
+        font-size: 0.85rem;
+        color: #718096;
+        margin-bottom: 0.75rem;
+        font-weight: 500;
+    }
+    
+    .speaker-name {
+        font-weight: 800;
+        color: #1A202C;
+    }
+    
+    .speech-text {
+        font-size: 0.95rem;
+        line-height: 1.7;
+        color: #2D3748;
     }
     
     /* Word cloud section */
@@ -297,11 +267,12 @@ st.markdown(
         border-radius: 8px;
         padding: 2rem;
         text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
     
     .wordcloud-title {
-        font-size: 1.2rem;
-        font-weight: 700;
+        font-size: 1.3rem;
+        font-weight: 800;
         color: #1A202C;
         margin-bottom: 1.5rem;
     }
@@ -310,10 +281,13 @@ st.markdown(
     .footer {
         background: #2C5282;
         color: white;
-        padding: 2rem;
-        margin: 3rem -3rem -3rem -3rem;
+        padding: 3rem 2.5rem;
+        margin: 4rem -3rem 0 -3rem !important;
         font-size: 0.9rem;
         border-top: 1px solid #1E40AF;
+        width: calc(100% + 6rem);
+        position: relative;
+        left: -3rem;
     }
     
     .footer-content {
