@@ -8,7 +8,6 @@ from src.analysis import generate_wordcloud_image
 from src.database import (
     create_tables,
     get_available_session_dates,
-    get_db_connection,
     get_party_summaries,
     get_speeches_for_session,
     get_word_metrics,
@@ -414,8 +413,7 @@ with st.sidebar.expander("LLM API Settings", expanded=False):
         st.success("API Key Active!")
 
     # Fetch Available Dates
-    with get_db_connection() as conn:
-        available_dates = get_available_session_dates(conn)
+    available_dates = get_available_session_dates()
 
 if not available_dates:
     st.sidebar.warning("No Hansard records currently stored.")
