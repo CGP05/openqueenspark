@@ -8,6 +8,7 @@ from src.analysis import generate_wordcloud_image
 from src.database import (
     create_tables,
     get_available_session_dates,
+    get_db_connection,
     get_party_summaries,
     get_speeches_for_session,
     get_word_metrics,
@@ -17,7 +18,7 @@ from src.scraper import fetch_and_process_date
 # Page Config
 st.set_page_config(
     page_title="OpenQueensPark — Ontario Legislature Overview",
-    page_icon="🏛️",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -26,202 +27,216 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-    /* Override Streamlit's dark theme - CRITICAL */
-    html, body {
-        background-color: #FFFFFF !important;
-        color: #1A202C !important;
+    /* GLOBAL OVERRIDES */
+    * {
+        background-color: transparent !important;
     }
     
-    /* Hide Streamlit elements */
-    [data-testid="stAppHeader"] { display: none !important; }
-    [data-testid="stToolbar"] { display: none !important; }
-    header { display: none !important; }
-    
-    /* Hide sidebar completely */
-    [data-testid="stSidebar"] { display: none !important; }
-    .sidebar { display: none !important; }
-    
-    /* Main app container */
-    .stApp {
+    html, body, .stApp, [data-testid="stAppViewContainer"] {
         background-color: #FFFFFF !important;
     }
     
-    /* App view container */
-    [data-testid="stAppViewContainer"] {
-        background-color: #FFFFFF !important;
-        color: #1A202C !important;
-        padding: 0 !important;
+    /* Hide Streamlit header and toolbar */
+    [data-testid="stAppHeader"],
+    [data-testid="stToolbar"],
+    header,
+    .stDecoration {
+        display: none !important;
     }
     
-    /* Main block container */
+    /* Hide sidebar completely and reclaim space */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarNav"],
+    .sidebar,
+    .st-emotion-cache-1wmy9hl {
+        display: none !important;
+        width: 0 !important;
+    }
+    
+    /* Main container - full width, white background */
     [data-testid="stMainBlockContainer"] {
         background-color: #FFFFFF !important;
-        padding: 0 !important;
+        width: 100% !important;
         max-width: 100% !important;
+        padding: 2rem 3rem !important;
     }
     
-    /* Remove default padding from main */
-    .main {
-        background-color: #FFFFFF !important;
+    /* Streamlit text, buttons, etc. */
+    .stText, .stMarkdown, .stMetric {
+        background-color: transparent !important;
+    }
+    
+    /* Remove Streamlit's default margins and padding */
+    .st-emotion-cache-1y4p8pa {
         padding: 0 !important;
     }
     
-    /* Base styles */
-    body, div {
-        background-color: #FFFFFF !important;
-    }
-    
-    /* Navigation bar */
+    /* Navigation bar - Streamlit compatible */
     .navbar {
-        background: linear-gradient(90deg, #2C5282 0%, #2D5A8C 100%);
-        padding: 1.25rem 2rem;
-        margin: 0 0 2rem 0;
-        color: white;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        border-radius: 8px;
+        background: linear-gradient(90deg, #2C5282 0%, #2D5A8C 100%) !important;
+        padding: 1rem 2rem !important;
+        margin: 0 -3rem 2rem -3rem !important;
+        margin-left: calc(-100vw / 2 + 100% / 2) !important;
+        margin-right: calc(-100vw / 2 + 100% / 2) !important;
+        width: 100vw !important;
+        color: #FFFFFF !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
     }
     
     .navbar-brand {
-        font-size: 1.3rem;
-        font-weight: 800;
-        letter-spacing: -0.5px;
+        font-size: 1.3rem !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.5px !important;
+        color: #FFFFFF !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     
     .navbar-menu {
-        display: flex;
-        gap: 2rem;
-        font-size: 0.9rem;
-        font-weight: 500;
+        display: flex !important;
+        gap: 2rem !important;
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        color: #FFFFFF !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    .navbar-menu span {
+        color: #FFFFFF !important;
+        background-color: transparent !important;
     }
     
     /* Content area - white background */
     .content-wrapper {
-        background: #FFFFFF;
-        color: #1A202C;
-        padding: 0 2rem;
+        background: #FFFFFF !important;
+        color: #1A202C !important;
+        padding: 0 2rem !important;
     }
     
     /* Headers */
     .main-header {
-        font-size: 2.8rem;
-        font-weight: 800;
-        color: #1A202C;
-        margin: 2rem 0 0.25rem 0;
-        letter-spacing: -0.8px;
+        font-size: 2.8rem !important;
+        font-weight: 800 !important;
+        color: #1A202C !important;
+        margin: 2rem 0 0.25rem 0 !important;
+        letter-spacing: -0.8px !important;
     }
     
     .sub-header {
-        font-size: 1.1rem;
-        color: #718096;
-        margin-bottom: 2.5rem;
-        font-weight: 400;
+        font-size: 1.1rem !important;
+        color: #718096 !important;
+        margin-bottom: 2.5rem !important;
+        font-weight: 400 !important;
     }
     
     .tagline {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #1A202C;
-        margin: 2.5rem 0 2rem 0;
-        text-align: center;
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+        color: #1A202C !important;
+        margin: 2.5rem 0 2rem 0 !important;
+        text-align: center !important;
     }
     
     /* Disclaimer box - matches openparliament */
     .disclaimer {
-        background: #FEF2F2;
-        border: 1px solid #FECACA;
-        border-left: 5px solid #DC2626;
-        border-radius: 6px;
-        padding: 1.25rem 1.5rem;
-        margin: 2rem 0 2.5rem 0;
-        font-size: 0.95rem;
-        color: #7F1D1D;
-        line-height: 1.6;
+        background: #FEF2F2 !important;
+        border: 1px solid #FECACA !important;
+        border-left: 5px solid #DC2626 !important;
+        border-radius: 6px !important;
+        padding: 1.25rem 1.5rem !important;
+        margin: 2rem 0 2.5rem 0 !important;
+        font-size: 0.95rem !important;
+        color: #7F1D1D !important;
+        line-height: 1.6 !important;
     }
     
     .disclaimer strong {
-        font-weight: 700;
+        font-weight: 700 !important;
     }
     
     /* Stats cards */
     .stat-card {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 2rem 1.5rem;
-        text-align: center;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-        transition: all 0.2s ease;
+        background: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        padding: 2rem 1.5rem !important;
+        text-align: center !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08) !important;
+        transition: all 0.2s ease !important;
     }
     
     .stat-card:hover {
-        border-color: #2C5282;
-        box-shadow: 0 4px 12px rgba(44, 82, 130, 0.1);
+        border-color: #2C5282 !important;
+        box-shadow: 0 4px 12px rgba(44, 82, 130, 0.1) !important;
     }
     
     .stat-value {
-        font-size: 2.8rem;
-        font-weight: 800;
-        color: #2C5282;
-        margin: 0.5rem 0;
-        letter-spacing: -0.5px;
+        font-size: 2.8rem !important;
+        font-weight: 800 !important;
+        color: #2C5282 !important;
+        margin: 0.5rem 0 !important;
+        letter-spacing: -0.5px !important;
     }
     
     .stat-label {
-        font-size: 0.75rem;
-        color: #718096;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
+        font-size: 0.75rem !important;
+        color: #718096 !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1.5px !important;
     }
     
     /* Word of the day section */
     .word-of-day-section {
-        background: linear-gradient(135deg, #2C5282 0%, #4A90A4 100%);
-        color: white;
-        padding: 2rem 1.5rem;
-        border-radius: 12px;
-        text-align: center;
-        box-shadow: 0 4px 16px rgba(44, 82, 130, 0.25);
-        transition: box-shadow 0.2s ease;
+        background: linear-gradient(135deg, #2C5282 0%, #4A90A4 100%) !important;
+        color: white !important;
+        padding: 2rem 1.5rem !important;
+        border-radius: 12px !important;
+        text-align: center !important;
+        box-shadow: 0 4px 16px rgba(44, 82, 130, 0.25) !important;
+        transition: box-shadow 0.2s ease !important;
     }
     
     .word-of-day-section:hover {
-        box-shadow: 0 6px 20px rgba(44, 82, 130, 0.35);
+        box-shadow: 0 6px 20px rgba(44, 82, 130, 0.35) !important;
     }
     
     .word-of-day-label {
-        font-size: 0.8rem;
-        font-weight: 700;
-        opacity: 0.95;
-        margin-bottom: 0.75rem;
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
+        font-size: 0.8rem !important;
+        font-weight: 700 !important;
+        opacity: 0.95 !important;
+        margin-bottom: 0.75rem !important;
+        letter-spacing: 1.5px !important;
+        text-transform: uppercase !important;
+        color: white !important;
     }
     
     .word-of-day-badge {
-        font-size: 2.2rem;
-        font-weight: 800;
-        letter-spacing: 0.5px;
+        font-size: 2.2rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.5px !important;
+        color: white !important;
     }
     
     /* Divider */
     .divider {
-        height: 2px;
-        background: linear-gradient(90deg, transparent, #E2E8F0, transparent);
-        margin: 3rem 0;
+        height: 2px !important;
+        background: linear-gradient(90deg, transparent, #E2E8F0, transparent) !important;
+        margin: 3rem 0 !important;
     }
     
     /* Section headers */
     .section-header {
-        font-size: 1.6rem;
-        font-weight: 800;
-        color: #1A202C;
-        border-bottom: 3px solid #2C5282;
-        padding-bottom: 1rem;
-        margin: 3rem 0 2rem 0;
+        font-size: 1.6rem !important;
+        font-weight: 800 !important;
+        color: #1A202C !important;
+        border-bottom: 3px solid #2C5282 !important;
+        padding-bottom: 1rem !important;
+        margin: 3rem 0 2rem 0 !important;
     }
     
     .subsection-header {
@@ -235,112 +250,112 @@ st.markdown(
     
     /* Party blocks */
     .party-block {
-        margin: 1.25rem 0;
-        padding: 1.5rem;
-        border-radius: 8px;
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-left: 5px solid;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        margin: 1.25rem 0 !important;
+        padding: 1.5rem !important;
+        border-radius: 8px !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-left: 5px solid !important;
+        transition: all 0.2s ease !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
     }
     
     .party-block:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
     }
     
     .party-name {
-        font-weight: 800;
-        font-size: 1.1rem;
-        margin-bottom: 1rem;
+        font-weight: 800 !important;
+        font-size: 1.1rem !important;
+        margin-bottom: 1rem !important;
     }
     
     .party-text {
-        font-size: 0.95rem;
-        line-height: 1.7;
-        color: #2D3748;
+        font-size: 0.95rem !important;
+        line-height: 1.7 !important;
+        color: #2D3748 !important;
     }
     
     /* Speech items */
     .speech-item {
-        margin: 1rem 0;
-        padding: 1.25rem;
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 6px;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        margin: 1rem 0 !important;
+        padding: 1.25rem !important;
+        background: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 6px !important;
+        transition: all 0.2s ease !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
     }
     
     .speech-item:hover {
-        border-color: #2C5282;
-        box-shadow: 0 4px 12px rgba(44, 82, 130, 0.15);
+        border-color: #2C5282 !important;
+        box-shadow: 0 4px 12px rgba(44, 82, 130, 0.15) !important;
     }
     
     .speech-meta {
-        font-size: 0.85rem;
-        color: #718096;
-        margin-bottom: 0.75rem;
-        font-weight: 500;
+        font-size: 0.85rem !important;
+        color: #718096 !important;
+        margin-bottom: 0.75rem !important;
+        font-weight: 500 !important;
     }
     
     .speaker-name {
-        font-weight: 800;
-        color: #1A202C;
+        font-weight: 800 !important;
+        color: #1A202C !important;
     }
     
     .speech-text {
-        font-size: 0.95rem;
-        line-height: 1.7;
-        color: #2D3748;
+        font-size: 0.95rem !important;
+        line-height: 1.7 !important;
+        color: #2D3748 !important;
     }
     
     /* Word cloud section */
     .wordcloud-section {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 2rem;
-        text-align: center;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-        transition: box-shadow 0.2s ease;
+        background: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        padding: 2rem !important;
+        text-align: center !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08) !important;
+        transition: box-shadow 0.2s ease !important;
     }
     
     .wordcloud-section:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
     }
     
     .wordcloud-title {
-        font-size: 1.15rem;
-        font-weight: 800;
-        color: #1A202C;
-        margin-bottom: 1.5rem;
-        letter-spacing: -0.3px;
+        font-size: 1.15rem !important;
+        font-weight: 800 !important;
+        color: #1A202C !important;
+        margin-bottom: 1.5rem !important;
+        letter-spacing: -0.3px !important;
     }
     
     /* Footer */
     .footer {
-        background: #2C5282;
-        color: white;
-        padding: 2.5rem 2rem;
-        margin: 4rem 0 0 0;
-        font-size: 0.9rem;
-        border-top: 1px solid #1E40AF;
-        border-radius: 8px;
+        background: #2C5282 !important;
+        color: white !important;
+        padding: 2.5rem 2rem !important;
+        margin: 4rem 0 0 0 !important;
+        font-size: 0.9rem !important;
+        border-top: 1px solid #1E40AF !important;
+        border-radius: 8px !important;
     }
     
     .footer-content {
-        max-width: 1200px;
-        margin: 0 auto;
+        max-width: 1200px !important;
+        margin: 0 auto !important;
     }
     
     .footer a {
-        color: #93C5FD;
-        text-decoration: none;
+        color: #93C5FD !important;
+        text-decoration: none !important;
     }
     
     .footer a:hover {
-        text-decoration: underline;
+        text-decoration: underline !important;
     }
     
     /* Divider */
@@ -355,7 +370,7 @@ st.markdown(
 )
 
 # Ensure database tables exist
-create_tables()
+create_tables()  # type: ignore
 
 # Navigation Header
 st.markdown(
@@ -375,12 +390,12 @@ st.markdown(
 )
 
 # Sidebar Setup
-st.sidebar.title("🏛️ OpenQueensPark")
+st.sidebar.title("OpenQueensPark")
 st.sidebar.markdown("*Ontario Legislature Daily Proceedings*")
 st.sidebar.divider()
 
 # Sidebar API Keys Configuration
-with st.sidebar.expander("🔑 LLM API Settings", expanded=False):
+with st.sidebar.expander("LLM API Settings", expanded=False):
     gemini_input = st.text_input(
         "Google AI Studio API Key",
         type="password",
@@ -398,15 +413,16 @@ with st.sidebar.expander("🔑 LLM API Settings", expanded=False):
     if gemini_input or openrouter_input:
         st.success("API Key Active!")
 
-# Fetch Available Dates
-available_dates = get_available_session_dates()
+    # Fetch Available Dates
+    with get_db_connection() as conn:
+        available_dates = get_available_session_dates(conn)
 
 if not available_dates:
     st.sidebar.warning("No Hansard records currently stored.")
     st.info(
-        "👋 Welcome to OpenQueensPark! Click below to fetch recent Ontario Legislature Hansard data."
+        "Welcome to OpenQueensPark! Click below to fetch recent Ontario Legislature Hansard data."
     )
-    if st.button("📥 Fetch Latest Hansard (June 2, 2026 Sample)"):
+    if st.button("Fetch Latest Hansard (June 2, 2026 Sample)"):
         with st.spinner("Scraping and analyzing Hansard data from OLA..."):
             fetch_and_process_date("2026-06-02", force_reprocess=True)
             st.rerun()
@@ -414,11 +430,14 @@ if not available_dates:
 
 # Convert available dates to date objects for Streamlit Calendar
 date_objects = [
-    datetime.datetime.strptime(d, "%Y-%m-%d").date() for d in available_dates
+    datetime.datetime.strptime(d, "%Y-%m-%d")
+    .replace(tzinfo=datetime.timezone.utc)
+    .date()
+    for d in available_dates
 ]
 default_date = date_objects[0]
 
-st.sidebar.subheader("📅 Calendar Navigation")
+st.sidebar.subheader("Calendar Navigation")
 selected_date = st.sidebar.date_input(
     "Select Sitting Date",
     value=default_date,
@@ -429,12 +448,12 @@ selected_date = st.sidebar.date_input(
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
 # Fetch data for selected date
-speeches = get_speeches_for_session(selected_date_str)
-summaries = get_party_summaries(selected_date_str)
-metrics = get_word_metrics(selected_date_str)
+speeches = get_speeches_for_session(selected_date_str)  # type: ignore
+summaries = get_party_summaries(selected_date_str)  # type: ignore
+metrics = get_word_metrics(selected_date_str)  # type: ignore
 
 st.sidebar.divider()
-st.sidebar.subheader("⚙️ System Status")
+st.sidebar.subheader("System Status")
 st.sidebar.success("Database Status: Online")
 
 active_engine = "Rule-based Fallback"
@@ -445,7 +464,7 @@ elif os.getenv("OPENROUTER_API_KEY"):
 st.sidebar.info(f"AI Engine: {active_engine}")
 
 # Trigger manual fetch in sidebar
-with st.sidebar.expander("🔄 Scrape Specific Date"):
+with st.sidebar.expander("Scrape Specific Date"):
     custom_date_input = st.date_input("Fetch Date", value=datetime.date(2026, 6, 2))
     if st.button("Fetch & Analyze"):
         with st.spinner(f"Fetching Hansard for {custom_date_input}..."):
@@ -477,7 +496,7 @@ st.markdown(
 st.markdown(
     """
 <div class='disclaimer'>
-<strong>⚠️ Computer-Generated Summary</strong> — Usually accurate, but every now and then it'll contain inaccuracies or total fabrications.
+<strong>Computer-Generated Summary</strong> — Usually accurate, but every now and then it'll contain inaccuracies or total fabrications.
 </div>
 """,
     unsafe_allow_html=True,
@@ -496,7 +515,7 @@ with col1:
         unsafe_allow_html=True,
     )
 with col2:
-    active_mpps = len(set(s["speaker_name"] for s in speeches)) if speeches else 0
+    active_mpps = len({s["speaker_name"] for s in speeches}) if speeches else 0
     st.markdown(
         f"""
     <div class='stat-card'>
@@ -746,22 +765,22 @@ if petition_speeches:
         )
 
 # Speech Browser (collapsible)
-with st.expander("📜 Browse All Speeches (Searchable)"):
+with st.expander("Browse All Speeches (Searchable)"):
     if speeches:
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             parties_list = ["All Parties"] + sorted(
-                list(set(s["party_name"] or "Independent" for s in speeches))
+                {s["party_name"] or "Independent" for s in speeches}
             )
             selected_party = st.selectbox("Filter by Party", parties_list)
         with f_col2:
             speakers_list = ["All Speakers"] + sorted(
-                list(set(s["speaker_name"] for s in speeches))
+                {s["speaker_name"] for s in speeches}
             )
             selected_speaker = st.selectbox("Filter by Speaker", speakers_list)
         with f_col3:
             sections_list = ["All Sections"] + sorted(
-                list(set(s["h2_heading"] for s in speeches if s["h2_heading"]))
+                {s["h2_heading"] for s in speeches if s["h2_heading"]}
             )
             selected_section = st.selectbox("Filter by Section", sections_list)
 
