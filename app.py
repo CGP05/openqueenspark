@@ -27,7 +27,7 @@ st.markdown(
     """
 <style>
     /* Override Streamlit's dark theme - CRITICAL */
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"], .main {
+    html, body {
         background-color: #FFFFFF !important;
         color: #1A202C !important;
     }
@@ -35,43 +35,72 @@ st.markdown(
     /* Hide Streamlit elements */
     [data-testid="stAppHeader"] { display: none !important; }
     [data-testid="stToolbar"] { display: none !important; }
-    .stApp { background-color: #FFFFFF !important; }
+    header { display: none !important; }
     
-    /* Main container styling */
+    /* Hide sidebar completely */
+    [data-testid="stSidebar"] { display: none !important; }
+    .sidebar { display: none !important; }
+    
+    /* Main app container */
+    .stApp {
+        background-color: #FFFFFF !important;
+    }
+    
+    /* App view container */
+    [data-testid="stAppViewContainer"] {
+        background-color: #FFFFFF !important;
+        color: #1A202C !important;
+        padding: 0 !important;
+    }
+    
+    /* Main block container */
     [data-testid="stMainBlockContainer"] {
         background-color: #FFFFFF !important;
         padding: 0 !important;
+        max-width: 100% !important;
     }
     
     /* Remove default padding from main */
     .main {
+        background-color: #FFFFFF !important;
+        padding: 0 !important;
+    }
+    
+    /* Base styles */
+    body, div {
         background-color: #FFFFFF !important;
     }
     
     /* Navigation bar - Full width */
     .navbar {
         background: linear-gradient(90deg, #2C5282 0%, #2D5A8C 100%);
-        padding: 1.25rem 2.5rem;
-        margin: -6rem -3rem 3rem -3rem !important;
+        padding: 1rem 3rem;
+        margin: 0 -9999px 3rem -9999px !important;
+        padding-left: calc(3rem + 9999px);
+        padding-right: calc(3rem + 9999px);
         color: white;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        width: calc(100% + 6rem);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        width: 100vw;
         position: relative;
-        left: -3rem;
+        left: 50%;
+        right: 50%;
+        margin-left: -50vw;
+        margin-right: -50vw;
     }
     
     .navbar-brand {
-        font-size: 1.6rem;
+        font-size: 1.4rem;
         font-weight: 800;
         letter-spacing: -0.5px;
+        min-width: fit-content;
     }
     
     .navbar-menu {
         display: flex;
-        gap: 2.5rem;
+        gap: 2rem;
         font-size: 0.95rem;
         font-weight: 500;
     }
@@ -80,26 +109,27 @@ st.markdown(
     .content-wrapper {
         background: #FFFFFF;
         color: #1A202C;
+        padding: 0 2rem;
     }
     
     /* Headers */
     .main-header {
-        font-size: 3rem;
+        font-size: 2.8rem;
         font-weight: 800;
         color: #1A202C;
-        margin: 2rem 0 0.5rem 0;
-        letter-spacing: -1px;
+        margin: 2rem 0 0.25rem 0;
+        letter-spacing: -0.8px;
     }
     
     .sub-header {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         color: #718096;
-        margin-bottom: 3rem;
+        margin-bottom: 2.5rem;
         font-weight: 400;
     }
     
     .tagline {
-        font-size: 2.2rem;
+        font-size: 2rem;
         font-weight: 700;
         color: #1A202C;
         margin: 2.5rem 0 2rem 0;
@@ -127,25 +157,32 @@ st.markdown(
     .stat-card {
         background: #FFFFFF;
         border: 1px solid #E2E8F0;
-        border-radius: 8px;
+        border-radius: 12px;
         padding: 2rem 1.5rem;
         text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        transition: all 0.2s ease;
+    }
+    
+    .stat-card:hover {
+        border-color: #2C5282;
+        box-shadow: 0 4px 12px rgba(44, 82, 130, 0.1);
     }
     
     .stat-value {
-        font-size: 2.5rem;
+        font-size: 2.8rem;
         font-weight: 800;
         color: #2C5282;
         margin: 0.5rem 0;
+        letter-spacing: -0.5px;
     }
     
     .stat-label {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         color: #718096;
-        font-weight: 600;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 1.5px;
     }
     
     /* Word of the day section */
@@ -153,23 +190,29 @@ st.markdown(
         background: linear-gradient(135deg, #2C5282 0%, #4A90A4 100%);
         color: white;
         padding: 2rem 1.5rem;
-        border-radius: 8px;
+        border-radius: 12px;
         text-align: center;
-        box-shadow: 0 4px 12px rgba(44, 82, 130, 0.2);
+        box-shadow: 0 4px 16px rgba(44, 82, 130, 0.25);
+        transition: box-shadow 0.2s ease;
+    }
+    
+    .word-of-day-section:hover {
+        box-shadow: 0 6px 20px rgba(44, 82, 130, 0.35);
     }
     
     .word-of-day-label {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         font-weight: 700;
         opacity: 0.95;
         margin-bottom: 0.75rem;
-        letter-spacing: 1px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
     }
     
     .word-of-day-badge {
         font-size: 2.2rem;
         font-weight: 800;
-        letter-spacing: 1px;
+        letter-spacing: 0.5px;
     }
     
     /* Divider */
@@ -264,30 +307,41 @@ st.markdown(
     .wordcloud-section {
         background: #FFFFFF;
         border: 1px solid #E2E8F0;
-        border-radius: 8px;
-        padding: 2rem;
+        border-radius: 12px;
+        padding: 2.5rem 2rem;
         text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        transition: box-shadow 0.2s ease;
+    }
+    
+    .wordcloud-section:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
     }
     
     .wordcloud-title {
-        font-size: 1.3rem;
+        font-size: 1.25rem;
         font-weight: 800;
         color: #1A202C;
         margin-bottom: 1.5rem;
+        letter-spacing: -0.3px;
     }
     
     /* Footer */
     .footer {
         background: #2C5282;
         color: white;
-        padding: 3rem 2.5rem;
-        margin: 4rem -3rem 0 -3rem !important;
+        padding: 2.5rem 3rem;
+        margin: 4rem -9999px 0 -9999px !important;
+        padding-left: calc(3rem + 9999px);
+        padding-right: calc(3rem + 9999px);
         font-size: 0.9rem;
         border-top: 1px solid #1E40AF;
-        width: calc(100% + 6rem);
+        width: 100vw;
         position: relative;
-        left: -3rem;
+        left: 50%;
+        right: 50%;
+        margin-left: -50vw;
+        margin-right: -50vw;
     }
     
     .footer-content {
