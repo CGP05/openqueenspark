@@ -11,8 +11,20 @@ from src.database import (
     get_party_summaries,
     get_speeches_for_session,
     get_word_metrics,
+    search_speeches,
+    search_bills,
+    get_bills_for_session,
 )
 from src.scraper import fetch_and_process_date
+
+# Ontario party seat counts (approximate current composition)
+PARTY_SEATS = {
+    "Progressive Conservative": 83,
+    "New Democratic Party": 28,
+    "Liberal": 8,
+    "Green Party": 2,
+    "Independent": 1,
+}
 
 # Page Config
 st.set_page_config(
@@ -500,384 +512,453 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Overview Stats Row
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.markdown(
-        f"""
-    <div class='stat-card'>
-        <div class='stat-value'>{len(speeches) if speeches else 0}</div>
-        <div class='stat-label'>Total Speeches</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-with col2:
-    active_mpps = len({s["speaker_name"] for s in speeches}) if speeches else 0
-    st.markdown(
-        f"""
-    <div class='stat-card'>
-        <div class='stat-value'>{active_mpps}</div>
-        <div class='stat-label'>Active MPPs</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-with col3:
-    wotd = metrics["word_of_the_day"] if metrics else "Parliament"
-    st.markdown(
-        f"""
-    <div class='word-of-day-section'>
-        <div class='word-of-day-label'>WORD OF THE DAY</div>
-        <div class='word-of-day-badge'>{wotd}</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
+# Navigation Tabs
+tab_speeches, tab_bills, tab_search = st.tabs(["📜 Daily Proceedings", "📋 Bills & Legislation", "🔍 Search"])
 
-st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-
-
-# Helper: Organize speeches by section (h2_heading) then by party
-def organize_by_section_and_party(speeches):
-    """Group speeches by h2_heading (section), then by party."""
-    sections = {}
-    for sp in speeches:
-        section = sp.get("h2_heading", "General Proceedings")
-        party = sp.get("party_name", "Independent")
-        if section not in sections:
-            sections[section] = {}
-        if party not in sections[section]:
-            sections[section][party] = []
-        sections[section][party].append(sp)
-    return sections
-
-
-# Party colors for OpenParliament-style display
-PARTY_COLORS = {
-    "Progressive Conservative": "#003366",
-    "New Democratic Party": "#FF6600",
-    "Liberal": "#FF0000",
-    "Green Party": "#009933",
-    "Independent": "#718096",
-    "Non-Partisan / Presiding Officer": "#4A5568",
-}
-
-PARTY_DISPLAY_ORDER = [
-    "Progressive Conservative",
-    "New Democratic Party",
-    "Liberal",
-    "Green Party",
-    "Independent",
-    "Non-Partisan / Presiding Officer",
-]
-
-# Main content heading
-st.markdown(
-    """
-<div style='text-align: center; margin: 2.5rem 0 2rem 0;'>
-    <h2 style='font-size: 1.8rem; font-weight: 700; color: #1A202C; margin: 0;'>What They're Talking About</h2>
-    <p style='color: #718096; margin-top: 0.5rem;'>The latest House transcript from {}, showing what's being debated.</p>
-</div>
-""".format(selected_date.strftime("%B %d")),
-    unsafe_allow_html=True,
-)
-
-# Main content area - OpenParliament style: Section → Topic → Party breakdown
-if speeches:
-    sections = organize_by_section_and_party(speeches)
-
-    for section_name in sorted(sections.keys()):
-        if section_name.strip() and section_name.lower() != "general proceedings":
-            st.markdown(
-                f"<div class='section-header'>{section_name}</div>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                "<div class='section-header'>Proceedings</div>", unsafe_allow_html=True
-            )
-
-        # For each section, show party breakdowns
-        section_parties = sections[section_name]
-
-        # Sort parties by seat count order
-        sorted_parties = sorted(
-            section_parties.keys(),
-            key=lambda x: (
-                PARTY_DISPLAY_ORDER.index(x) if x in PARTY_DISPLAY_ORDER else 999
-            ),
-        )
-
-        for party_name in sorted_parties:
-            party_speeches = section_parties[party_name]
-            if not party_speeches:
-                continue
-
-            color = PARTY_COLORS.get(party_name, "#4A5568")
-            short_name = party_name.replace("Progressive Conservative", "PC").replace(
-                "New Democratic Party", "NDP"
-            )
-
-            # Party header with colored left border
-            st.markdown(
-                f"""
-            <div class='party-block' style='border-left-color: {color};'>
-                <div class='party-name' style='color: {color};'>{short_name}</div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-            # Show first few speeches as topic summaries
-            for idx, sp in enumerate(party_speeches[:3]):
-                h3 = sp.get("h3_heading", "")
-                topic = h3 if h3 else "Remarks"
-                speaker = sp.get("speaker_name", "MPP")
-                text_preview = sp.get("text", "")[:300]
-
-                st.markdown(
-                    f"""
-                <div class='speech-item'>
-                    <div class='speech-meta'>
-                        <span class='speaker-name'>{speaker}</span> — {topic}
+with tab_speeches:
+    with tab_bills:
+        st.markdown("""
+        <div style='text-align: center; margin: 2rem 0 1.5rem 0;'>
+            <h2 style='font-size: 1.8rem; font-weight: 700; color: #1A202C; margin: 0;'>Bills &amp; Legislation</h2>
+            <p style='color: #718096; margin-top: 0.5rem;'>Bills mentioned in today's proceedings.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        # Fetch bills for this session
+        session_bills = []
+        if session_id:
+            session_bills = get_bills_for_session(session_id)
+        if session_bills:
+            for bill in session_bills:
+                bill_num = bill.get("bill_number", "Unknown Bill")
+                sponsor = bill.get("sponsor_name") or "Unknown Sponsor"
+                stage = bill.get("stage") or "Introduced"
+                st.markdown(f"""
+                <div style='background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.5rem; margin: 1rem 0;'>
+                    <div style='font-size: 1.2rem; font-weight: 700; color: #003366;'>{bill_num}</div>
+                    <div style='color: #718096; font-size: 0.9rem; margin-top: 0.5rem;'>
+                        Sponsor: {sponsor} | Stage: {stage}
                     </div>
-                    <div>{text_preview}{"..." if len(sp["text"]) > 300 else ""}</div>
                 </div>
-                """,
-                    unsafe_allow_html=True,
-                )
-
-            if len(party_speeches) > 3:
-                with st.expander(
-                    f"Show {len(party_speeches) - 3} more from {short_name}"
-                ):
-                    for sp in party_speeches[3:]:
-                        h3 = sp.get("h3_heading", "")
-                        topic = h3 if h3 else "Remarks"
-                        speaker = sp.get("speaker_name", "MPP")
-
-                        st.markdown(
-                            f"""
-                        <div class='speech-item'>
-                            <div class='speech-meta'>
-                                <span class='speaker-name'>{speaker}</span> — {topic}
-                            </div>
-                            <div>{sp["text"][:400]}{"..." if len(sp["text"]) > 400 else ""}</div>
-                        </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-# Bills / Legislation Section (extract from h3_headings that look like bills)
-bill_speeches = [
-    s
-    for s in speeches
-    if s.get("h3_heading")
-    and (
-        "bill" in s.get("h3_heading", "").lower()
-        or "act" in s.get("h3_heading", "").lower()
-    )
-]
-if bill_speeches:
-    st.markdown(
-        "<div class='section-header'>Bills & Legislation</div>", unsafe_allow_html=True
-    )
-
-    # Group bills by bill name
-    bills = {}
-    for sp in bill_speeches:
-        bill_name = sp.get("h3_heading", "Unknown Bill")
-        party = sp.get("party_name", "Independent")
-        if bill_name not in bills:
-            bills[bill_name] = {}
-        if party not in bills[bill_name]:
-            bills[bill_name][party] = []
-        bills[bill_name][party].append(sp)
-
-    for bill_name in sorted(bills.keys()):
-        st.markdown(
-            f"<div class='topic-header'>{bill_name}</div>", unsafe_allow_html=True
-        )
-
-        for party_name in sorted(
-            bills[bill_name].keys(),
-            key=lambda x: (
-                PARTY_DISPLAY_ORDER.index(x) if x in PARTY_DISPLAY_ORDER else 999
-            ),
-        ):
-            party_speeches = bills[bill_name][party_name]
-            color = PARTY_COLORS.get(party_name, "#4A5568")
-            short_name = party_name.replace("Progressive Conservative", "PC").replace(
-                "New Democratic Party", "NDP"
-            )
-
-            st.markdown(
-                f"""
-            <div class='party-block' style='border-left-color: {color};'>
-                <div class='party-name' style='color: {color};'>{short_name}</div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-            for sp in party_speeches[:2]:
-                speaker = sp.get("speaker_name", "MPP")
-                text = sp.get("text", "")[:250]
-                st.markdown(
-                    f"<div class='party-text'><strong>{speaker}:</strong> {text}...</div>",
-                    unsafe_allow_html=True,
-                )
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-# Petitions & Matters of Privilege Section
-petition_speeches = [
-    s
-    for s in speeches
-    if s.get("h3_heading")
-    and any(
-        kw in s.get("h3_heading", "").lower()
-        for kw in ["petition", "privilege", "matter"]
-    )
-]
-if petition_speeches:
-    st.markdown(
-        "<div class='section-header'>Petitions & Matters</div>", unsafe_allow_html=True
-    )
-    for sp in petition_speeches[:10]:
-        speaker = sp.get("speaker_name", "MPP")
-        party = sp.get("party_name", "Independent")
-        topic = sp.get("h3_heading", "")
-        color = PARTY_COLORS.get(party, "#4A5568")
+                """, unsafe_allow_html=True)
+        else:
+            st.info("No bills recorded for this session yet. Run the scraper to extract bill mentions from Hansard transcripts.")
+    
+        # Search bills database
+        st.markdown("<hr style='margin: 2rem 0; border-color: #E2E8F0;'>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #1A202C;'>Search Bills Database</h3>", unsafe_allow_html=True)
+        bill_search_query = st.text_input("Search bills by number, name, or sponsor:", key="bill_search")
+        if bill_search_query and st.button("Search Bills", key="search_bills_btn"):
+            results = search_bills(bill_search_query)
+            if results:
+                st.write(f"Found {len(results)} bill(s):")
+                for b in results[:10]:
+                    st.markdown(f"**{b.get('bill_number', 'N/A')}** — {b.get('bill_name', 'N/A')} (Sponsor: {b.get('sponsor_name', 'N/A')})")
+            else:
+                st.info("No bills found matching your search.")
+    
+    with tab_search:
+        st.markdown("""
+        <div style='text-align: center; margin: 2rem 0 1.5rem 0;'>
+            <h2 style='font-size: 1.8rem; font-weight: 700; color: #1A202C; margin: 0;'>Search Hansard</h2>
+            <p style='color: #718096; margin-top: 0.5rem;'>Search across all speeches using full-text search.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        speech_search_query = st.text_input("Search speeches:", key="speech_search")
+        if speech_search_query and st.button("Search", key="search_speeches_btn"):
+            results = search_speeches(speech_search_query, limit=20, session_date=selected_date)
+            if results:
+                st.write(f"Found {len(results)} speech(es):")
+                for sp in results[:10]:
+                    snippet = sp.get("snippet", sp.get("text", ""))[:300]
+                    speaker = sp.get("speaker_name", "Unknown")
+                    party = sp.get("party_name", "Independent")
+                    st.markdown(f"""
+                    <div style='background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1rem; margin: 0.5rem 0;'>
+                        <div style='font-weight: 600; color: #003366;'>{speaker} ({party})</div>
+                        <div style='color: #4A5568; font-size: 0.9rem;'>...{snippet}...</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No speeches found matching your search.")
+    
+    # Overview Stats Row
+    col1, col2, col3 = st.columns(3)
+    with col1:
         st.markdown(
             f"""
-        <div class='speech-item'>
-            <div class='speech-meta'>
-                <span class='speaker-name' style='color: {color};'>{speaker}</span> ({party}) — {topic}
-            </div>
-            <div>{sp["text"][:300]}{"..." if len(sp["text"]) > 300 else ""}</div>
+        <div class='stat-card'>
+            <div class='stat-value'>{len(speeches) if speeches else 0}</div>
+            <div class='stat-label'>Total Speeches</div>
         </div>
         """,
             unsafe_allow_html=True,
         )
-
-# Speech Browser (collapsible)
-with st.expander("Browse All Speeches (Searchable)"):
+    with col2:
+        active_mpps = len({s["speaker_name"] for s in speeches}) if speeches else 0
+        st.markdown(
+            f"""
+        <div class='stat-card'>
+            <div class='stat-value'>{active_mpps}</div>
+            <div class='stat-label'>Active MPPs</div>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+    with col3:
+        wotd = metrics["word_of_the_day"] if metrics else "Parliament"
+        st.markdown(
+            f"""
+        <div class='word-of-day-section'>
+            <div class='word-of-day-label'>WORD OF THE DAY</div>
+            <div class='word-of-day-badge'>{wotd}</div>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+    
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    
+    
+    # Helper: Organize speeches by section (h2_heading) then by party
+    def organize_by_section_and_party(speeches):
+        """Group speeches by h2_heading (section), then by party."""
+        sections = {}
+        for sp in speeches:
+            section = sp.get("h2_heading", "General Proceedings")
+            party = sp.get("party_name", "Independent")
+            if section not in sections:
+                sections[section] = {}
+            if party not in sections[section]:
+                sections[section][party] = []
+            sections[section][party].append(sp)
+        return sections
+    
+    
+    # Party colors for OpenParliament-style display
+    PARTY_COLORS = {
+        "Progressive Conservative": "#003366",
+        "New Democratic Party": "#FF6600",
+        "Liberal": "#FF0000",
+        "Green Party": "#009933",
+        "Independent": "#718096",
+        "Non-Partisan / Presiding Officer": "#4A5568",
+    }
+    
+    PARTY_DISPLAY_ORDER = [
+        "Progressive Conservative",
+        "New Democratic Party",
+        "Liberal",
+        "Green Party",
+        "Independent",
+        "Non-Partisan / Presiding Officer",
+    ]
+    
+    # Main content heading
+    st.markdown(
+        """
+    <div style='text-align: center; margin: 2.5rem 0 2rem 0;'>
+        <h2 style='font-size: 1.8rem; font-weight: 700; color: #1A202C; margin: 0;'>What They're Talking About</h2>
+        <p style='color: #718096; margin-top: 0.5rem;'>The latest House transcript from {}, showing what's being debated.</p>
+    </div>
+    """.format(selected_date.strftime("%B %d")),
+        unsafe_allow_html=True,
+    )
+    
+    # Main content area - OpenParliament style: Section → Topic → Party breakdown
     if speeches:
-        f_col1, f_col2, f_col3 = st.columns(3)
-        with f_col1:
-            parties_list = ["All Parties"] + sorted(
-                {s["party_name"] or "Independent" for s in speeches}
+        sections = organize_by_section_and_party(speeches)
+    
+        for section_name in sorted(sections.keys()):
+            if section_name.strip() and section_name.lower() != "general proceedings":
+                st.markdown(
+                    f"<div class='section-header'>{section_name}</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    "<div class='section-header'>Proceedings</div>", unsafe_allow_html=True
+                )
+    
+            # For each section, show party breakdowns
+            section_parties = sections[section_name]
+    
+            # Sort parties by seat count order
+            sorted_parties = sorted(
+                section_parties.keys(),
+                key=lambda x: (
+                    PARTY_DISPLAY_ORDER.index(x) if x in PARTY_DISPLAY_ORDER else 999
+                ),
             )
-            selected_party = st.selectbox("Filter by Party", parties_list)
-        with f_col2:
-            speakers_list = ["All Speakers"] + sorted(
-                {s["speaker_name"] for s in speeches}
+    
+            for party_name in sorted_parties:
+                party_speeches = section_parties[party_name]
+                if not party_speeches:
+                    continue
+    
+                color = PARTY_COLORS.get(party_name, "#4A5568")
+                short_name = party_name.replace("Progressive Conservative", "PC").replace(
+                    "New Democratic Party", "NDP"
+                )
+    
+                # Party header with colored left border
+                st.markdown(
+                    f"""
+                <div class='party-block' style='border-left-color: {color};'>
+                    <div class='party-name' style='color: {color};'>{short_name}</div>
+                """,
+                    unsafe_allow_html=True,
+                )
+    
+                # Show first few speeches as topic summaries
+                for idx, sp in enumerate(party_speeches[:3]):
+                    h3 = sp.get("h3_heading", "")
+                    topic = h3 if h3 else "Remarks"
+                    speaker = sp.get("speaker_name", "MPP")
+                    text_preview = sp.get("text", "")[:300]
+    
+                    st.markdown(
+                        f"""
+                    <div class='speech-item'>
+                        <div class='speech-meta'>
+                            <span class='speaker-name'>{speaker}</span> — {topic}
+                        </div>
+                        <div>{text_preview}{"..." if len(sp["text"]) > 300 else ""}</div>
+                    </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+    
+                if len(party_speeches) > 3:
+                    with st.expander(
+                        f"Show {len(party_speeches) - 3} more from {short_name}"
+                    ):
+                        for sp in party_speeches[3:]:
+                            h3 = sp.get("h3_heading", "")
+                            topic = h3 if h3 else "Remarks"
+                            speaker = sp.get("speaker_name", "MPP")
+    
+                            st.markdown(
+                                f"""
+                            <div class='speech-item'>
+                                <div class='speech-meta'>
+                                    <span class='speaker-name'>{speaker}</span> — {topic}
+                                </div>
+                                <div>{sp["text"][:400]}{"..." if len(sp["text"]) > 400 else ""}</div>
+                            </div>
+                            """,
+                                unsafe_allow_html=True,
+                            )
+    
+                st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Bills / Legislation Section (extract from h3_headings that look like bills)
+    bill_speeches = [
+        s
+        for s in speeches
+        if s.get("h3_heading")
+        and (
+            "bill" in s.get("h3_heading", "").lower()
+            or "act" in s.get("h3_heading", "").lower()
+        )
+    ]
+    if bill_speeches:
+        st.markdown(
+            "<div class='section-header'>Bills & Legislation</div>", unsafe_allow_html=True
+        )
+    
+        # Group bills by bill name
+        bills = {}
+        for sp in bill_speeches:
+            bill_name = sp.get("h3_heading", "Unknown Bill")
+            party = sp.get("party_name", "Independent")
+            if bill_name not in bills:
+                bills[bill_name] = {}
+            if party not in bills[bill_name]:
+                bills[bill_name][party] = []
+            bills[bill_name][party].append(sp)
+    
+        for bill_name in sorted(bills.keys()):
+            st.markdown(
+                f"<div class='topic-header'>{bill_name}</div>", unsafe_allow_html=True
             )
-            selected_speaker = st.selectbox("Filter by Speaker", speakers_list)
-        with f_col3:
-            sections_list = ["All Sections"] + sorted(
-                {s["h2_heading"] for s in speeches if s["h2_heading"]}
-            )
-            selected_section = st.selectbox("Filter by Section", sections_list)
-
-        filtered_speeches = speeches
-        if selected_party != "All Parties":
-            filtered_speeches = [
-                s
-                for s in filtered_speeches
-                if (s["party_name"] or "Independent") == selected_party
-            ]
-        if selected_speaker != "All Speakers":
-            filtered_speeches = [
-                s for s in filtered_speeches if s["speaker_name"] == selected_speaker
-            ]
-        if selected_section != "All Sections":
-            filtered_speeches = [
-                s for s in filtered_speeches if s["h2_heading"] == selected_section
-            ]
-
-        st.caption(f"Showing {len(filtered_speeches)} of {len(speeches)} speeches")
-
-        for sp in filtered_speeches[:50]:
-            party_str = sp["party_name"] or "Independent"
-            h2 = sp["h2_heading"] or "General"
-            h3 = f" → {sp['h3_heading']}" if sp["h3_heading"] else ""
-            color = PARTY_COLORS.get(party_str, "#4A5568")
-
+    
+            for party_name in sorted(
+                bills[bill_name].keys(),
+                key=lambda x: (
+                    PARTY_DISPLAY_ORDER.index(x) if x in PARTY_DISPLAY_ORDER else 999
+                ),
+            ):
+                party_speeches = bills[bill_name][party_name]
+                color = PARTY_COLORS.get(party_name, "#4A5568")
+                short_name = party_name.replace("Progressive Conservative", "PC").replace(
+                    "New Democratic Party", "NDP"
+                )
+    
+                st.markdown(
+                    f"""
+                <div class='party-block' style='border-left-color: {color};'>
+                    <div class='party-name' style='color: {color};'>{short_name}</div>
+                """,
+                    unsafe_allow_html=True,
+                )
+    
+                for sp in party_speeches[:2]:
+                    speaker = sp.get("speaker_name", "MPP")
+                    text = sp.get("text", "")[:250]
+                    st.markdown(
+                        f"<div class='party-text'><strong>{speaker}:</strong> {text}...</div>",
+                        unsafe_allow_html=True,
+                    )
+    
+                st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Petitions & Matters of Privilege Section
+    petition_speeches = [
+        s
+        for s in speeches
+        if s.get("h3_heading")
+        and any(
+            kw in s.get("h3_heading", "").lower()
+            for kw in ["petition", "privilege", "matter"]
+        )
+    ]
+    if petition_speeches:
+        st.markdown(
+            "<div class='section-header'>Petitions & Matters</div>", unsafe_allow_html=True
+        )
+        for sp in petition_speeches[:10]:
+            speaker = sp.get("speaker_name", "MPP")
+            party = sp.get("party_name", "Independent")
+            topic = sp.get("h3_heading", "")
+            color = PARTY_COLORS.get(party, "#4A5568")
             st.markdown(
                 f"""
             <div class='speech-item'>
                 <div class='speech-meta'>
-                    <span class='speaker-name' style='color: {color};'>{sp["speaker_name"]}</span> ({party_str}) — <em>{sp["constituency"] or "Ontario"}</em>
-                    <br/>Section: {h2}{h3} | Time: {sp["timestamp"] or "N/A"}
+                    <span class='speaker-name' style='color: {color};'>{speaker}</span> ({party}) — {topic}
                 </div>
-                <div>{sp["text"][:500]}{"..." if len(sp["text"]) > 500 else ""}</div>
+                <div>{sp["text"][:300]}{"..." if len(sp["text"]) > 300 else ""}</div>
             </div>
             """,
                 unsafe_allow_html=True,
             )
-
-# Analytics & Visualizations Section
-st.markdown(
-    """
-<div style='text-align: center; margin: 3rem 0 2rem 0;'>
-    <h2 style='font-size: 1.8rem; font-weight: 700; color: #1A202C; margin: 0;'>What's Being Discussed</h2>
-    <p style='color: #718096; margin-top: 0.5rem;'>Top topics and phrases from today's debate.</p>
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
-col_wc, col_ngrams = st.columns([1.2, 1])
-with col_wc:
+    
+    # Speech Browser (collapsible)
+    with st.expander("Browse All Speeches (Searchable)"):
+        if speeches:
+            f_col1, f_col2, f_col3 = st.columns(3)
+            with f_col1:
+                parties_list = ["All Parties"] + sorted(
+                    {s["party_name"] or "Independent" for s in speeches}
+                )
+                selected_party = st.selectbox("Filter by Party", parties_list)
+            with f_col2:
+                speakers_list = ["All Speakers"] + sorted(
+                    {s["speaker_name"] for s in speeches}
+                )
+                selected_speaker = st.selectbox("Filter by Speaker", speakers_list)
+            with f_col3:
+                sections_list = ["All Sections"] + sorted(
+                    {s["h2_heading"] for s in speeches if s["h2_heading"]}
+                )
+                selected_section = st.selectbox("Filter by Section", sections_list)
+    
+            filtered_speeches = speeches
+            if selected_party != "All Parties":
+                filtered_speeches = [
+                    s
+                    for s in filtered_speeches
+                    if (s["party_name"] or "Independent") == selected_party
+                ]
+            if selected_speaker != "All Speakers":
+                filtered_speeches = [
+                    s for s in filtered_speeches if s["speaker_name"] == selected_speaker
+                ]
+            if selected_section != "All Sections":
+                filtered_speeches = [
+                    s for s in filtered_speeches if s["h2_heading"] == selected_section
+                ]
+    
+            st.caption(f"Showing {len(filtered_speeches)} of {len(speeches)} speeches")
+    
+            for sp in filtered_speeches[:50]:
+                party_str = sp["party_name"] or "Independent"
+                h2 = sp["h2_heading"] or "General"
+                h3 = f" → {sp['h3_heading']}" if sp["h3_heading"] else ""
+                color = PARTY_COLORS.get(party_str, "#4A5568")
+    
+                st.markdown(
+                    f"""
+                <div class='speech-item'>
+                    <div class='speech-meta'>
+                        <span class='speaker-name' style='color: {color};'>{sp["speaker_name"]}</span> ({party_str}) — <em>{sp["constituency"] or "Ontario"}</em>
+                        <br/>Section: {h2}{h3} | Time: {sp["timestamp"] or "N/A"}
+                    </div>
+                    <div>{sp["text"][:500]}{"..." if len(sp["text"]) > 500 else ""}</div>
+                </div>
+                """,
+                    unsafe_allow_html=True,
+                )
+    
+    # Analytics & Visualizations Section
     st.markdown(
         """
-    <div class='wordcloud-section'>
-        <div class='wordcloud-title'>Daily Speech Word Cloud</div>
-    """,
-        unsafe_allow_html=True,
-    )
-    if speeches:
-        combined_text = " ".join([s["text"] for s in speeches])
-        img_buf = generate_wordcloud_image(combined_text)
-        st.image(img_buf, width=600)
-    else:
-        st.info("No speech text available for Word Cloud.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with col_ngrams:
-    st.markdown(
-        """
-    <div style='background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 2rem; text-align: left;'>
-        <div style='font-size: 1.2rem; font-weight: 700; color: #1A202C; margin-bottom: 1rem;'>Top Phrases</div>
-    """,
-        unsafe_allow_html=True,
-    )
-    if metrics and metrics.get("top_ngrams"):
-        df_ngrams = pd.DataFrame(metrics["top_ngrams"])
-        df_ngrams.columns = ["Phrase", "Score", "Type"]
-        st.dataframe(df_ngrams, hide_index=True, use_container_width=True)
-    else:
-        st.info("No phrase metrics available.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-
-st.markdown(
-    """
-<div class='footer'>
-    <div class='footer-content'>
-        <p style='margin-bottom: 1rem;'>
-            <strong>OpenQueensPark</strong> is an open-source civic-tech platform tracking Ontario's provincial legislature.
-        </p>
-        <p style='font-size: 0.85rem; opacity: 0.9;'>
-            Automated Ontario Legislature Analytics • Neutral AI Summaries • Computer-Generated Summaries • 
-            <a href='https://openparliament.ca'>Inspired by OpenParliament.ca</a>
-        </p>
+    <div style='text-align: center; margin: 3rem 0 2rem 0;'>
+        <h2 style='font-size: 1.8rem; font-weight: 700; color: #1A202C; margin: 0;'>What's Being Discussed</h2>
+        <p style='color: #718096; margin-top: 0.5rem;'>Top topics and phrases from today's debate.</p>
     </div>
-</div>
+    """,
+        unsafe_allow_html=True,
+    )
+    
+    col_wc, col_ngrams = st.columns([1.2, 1])
+    with col_wc:
+        st.markdown(
+            """
+        <div class='wordcloud-section'>
+            <div class='wordcloud-title'>Daily Speech Word Cloud</div>
+        """,
+            unsafe_allow_html=True,
+        )
+        if speeches:
+            combined_text = " ".join([s["text"] for s in speeches])
+            img_buf = generate_wordcloud_image(combined_text)
+            st.image(img_buf, width=600)
+        else:
+            st.info("No speech text available for Word Cloud.")
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    with col_ngrams:
+        st.markdown(
+            """
+        <div style='background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 2rem; text-align: left;'>
+            <div style='font-size: 1.2rem; font-weight: 700; color: #1A202C; margin-bottom: 1rem;'>Top Phrases</div>
+        """,
+            unsafe_allow_html=True,
+        )
+        if metrics and metrics.get("top_ngrams"):
+            df_ngrams = pd.DataFrame(metrics["top_ngrams"])
+            df_ngrams.columns = ["Phrase", "Score", "Type"]
+            st.dataframe(df_ngrams, hide_index=True, use_container_width=True)
+        else:
+            st.info("No phrase metrics available.")
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    
+    st.markdown(
+        """
+    <div class='footer'>
+        <div class='footer-content'>
+            <p style='margin-bottom: 1rem;'>
+                <strong>OpenQueensPark</strong> is an open-source civic-tech platform tracking Ontario's provincial legislature.
+            </p>
+            <p style='font-size: 0.85rem; opacity: 0.9;'>
+                Automated Ontario Legislature Analytics • Neutral AI Summaries • Computer-Generated Summaries • 
+                <a href='https://openparliament.ca'>Inspired by OpenParliament.ca</a>
+            </p>
+        </div>
+    </div>
 """,
     unsafe_allow_html=True,
 )

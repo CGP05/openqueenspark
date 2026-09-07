@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,7 +16,7 @@ from src.database import (
 )
 from src.parser import parse_hansard_html
 from src.analysis import analyze_speeches
-from src.summarizer import generate_all_party_summaries
+from src.summarizer import generate_all_party_summaries, DEFAULT_OLLAMA_MODEL
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ def fetch_and_process_date(date_str, parliament=44, session_number=1, force_repr
                 session_id=session_id,
                 party_name=party_name,
                 summary=summary_text,
-                model_used="gemini/openrouter/fallback"
+                model_used=determine_model_used()
             )
 
         logger.info(f"Successfully processed and stored Hansard for {date_str}!")
@@ -113,6 +114,17 @@ def fetch_and_process_date(date_str, parliament=44, session_number=1, force_repr
     except requests.RequestException as e:
         logger.error(f"Error fetching {url}: {e}")
         return None
+
+
+def determine_model_used():
+    """Determine which AI model was actually used for summaries."""
+    if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+        return "gemini"
+    elif os.getenv("OPENROUTER_API_KEY"):
+        return "openrouter"
+    elif os.getenv("OLLAMA_MODEL") or os.getenv("OLLAMA_BASE_URL"):
+        return "ollama"
+    return "fallback"
 
 
 def backfill_known_dates():

@@ -2,6 +2,8 @@ import os
 import requests
 import json
 import logging
+import urllib.request
+import json as json_module
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -9,6 +11,7 @@ logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 SYSTEM_PROMPT = """You are a neutral, non-partisan, objective parliamentary analyst for OpenQueensPark.
 Your task is to summarize the daily proceedings of the Legislative Assembly of Ontario.
@@ -86,6 +89,38 @@ def generate_summary_openrouter(party_name, speech_text, api_key=OPENROUTER_API_
         logger.error(f"OpenRouter API error: {e}")
     return None
 
+def generate_summary_ollama(party_name, speech_text, model=DEFAULT_OLLAMA_MODEL, base_url=OLLAMA_BASE_URL):
+    """
+    Calls a locally-running Ollama instance.
+    Uses the Ollama REST API at {base_url}/api/generate.
+    """
+    prompt = f"{SYSTEM_PROMPT}\n\nParty: {party_name}\nSpeeches recorded today:\n{speech_text}\n\nProvide a 3-4 paragraph neutral summary of {party_name}'s key positions, questions, and statements made today in the Ontario Legislature."
+
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.3
+        }
+    }
+
+    try:
+        url = f"{base_url.rstrip('/')}/api/generate"
+        req = urllib.request.Request(
+            url,
+            data=json_module.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json_module.loads(resp.read().decode("utf-8"))
+            return data.get("response", "").strip()
+    except Exception as e:
+        logger.error(f"Ollama API error: {e}")
+        return None
+
+
 def generate_fallback_summary(party_name, speeches):
     total_speeches = len(speeches)
     speakers = set(sp.get('speaker_name', 'MPP') for sp in speeches)
@@ -128,6 +163,13 @@ def generate_party_summary(party_name, speeches):
         if res:
             return res
 
+
+    # Priority 3: Local Ollama
+    if os.getenv("OLLAMA_MODEL") or os.getenv("OLLAMA_BASE_URL"):
+        logger.info(f"Generating summary for {party_name} via local Ollama ({DEFAULT_OLLAMA_MODEL})...")
+        res = generate_summary_ollama(party_name, speech_text)
+        if res:
+            return res
 
     # Priority 4: Rule-based fallback
     return generate_fallback_summary(party_name, speeches)
