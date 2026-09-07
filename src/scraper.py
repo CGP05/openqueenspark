@@ -16,7 +16,7 @@ from src.database import (
 )
 from src.parser import parse_hansard_html
 from src.analysis import analyze_speeches
-from src.summarizer import generate_all_party_summaries, DEFAULT_OLLAMA_MODEL
+from src.summarizer import generate_all_party_summaries
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -122,8 +122,6 @@ def determine_model_used():
         return "gemini"
     elif os.getenv("OPENROUTER_API_KEY"):
         return "openrouter"
-    elif os.getenv("OLLAMA_MODEL") or os.getenv("OLLAMA_BASE_URL"):
-        return "ollama"
     return "fallback"
 
 

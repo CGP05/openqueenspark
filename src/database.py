@@ -116,7 +116,7 @@ def create_tables(conn):
             session_id INTEGER NOT NULL,
             party_name TEXT NOT NULL,
             summary TEXT NOT NULL,
-            model_used TEXT DEFAULT 'ollama',
+            model_used TEXT DEFAULT 'fallback',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (session_id) REFERENCES sessions(id),
             UNIQUE(session_id, party_name)
@@ -415,7 +415,7 @@ def insert_speech(
 
 
 @with_connection
-def save_party_summary(conn, session_id, party_name, summary, model_used="ollama"):
+def save_party_summary(conn, session_id, party_name, summary, model_used="fallback"):
     cursor = conn.cursor()
     cursor.execute(
         """

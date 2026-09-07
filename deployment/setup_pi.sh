@@ -20,12 +20,8 @@ pip install -r requirements.txt
 echo "[3/5] Initializing SQLite database..."
 python3 -c "import database; database.create_tables()"
 
-# 4. Install & Configure Ollama
-echo "[4/5] Installing Ollama..."
-curl -fsSL https://ollama.com/install.sh | sh
 
 echo "Pulling llama3 model..."
-ollama pull llama3
 
 # 5. Install systemd service for OpenQueensPark
 echo "[5/5] Configuring systemd auto-start service..."

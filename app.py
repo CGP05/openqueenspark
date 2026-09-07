@@ -513,7 +513,7 @@ st.markdown(
 )
 
 # Navigation Tabs
-tab_speeches, tab_bills, tab_search = st.tabs(["📜 Daily Proceedings", "📋 Bills & Legislation", "🔍 Search"])
+tab_speeches, tab_bills, tab_search = st.tabs([" Daily Proceedings", " Bills & Legislation", " Search"])
 
 with tab_speeches:
     with tab_bills:
