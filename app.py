@@ -489,7 +489,7 @@ with st.sidebar.expander("Scrape Specific Date"):
 
 # Main Interface Header
 st.markdown(
-    "<div class='main-header'>Ontario Legislature</div>",
+    "<div class='main-header'>OpenQueensPark</div>",
     unsafe_allow_html=True,
 )
 st.markdown(
